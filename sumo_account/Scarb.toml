@@ -1,0 +1,14 @@
+[package]
+name = "sumo_account"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+starknet = { workspace = true }
+
+
+[[target.starknet-contract]]
+sierra = true
+casm = true
+casm-add-pythonic-hints = true
+allowed-libfuncs-list.name = "experimental"
