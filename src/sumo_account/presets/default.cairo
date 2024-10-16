@@ -4,13 +4,14 @@ mod SumoAccount {
     // use starknet::storage::StoragePointerReadAccess;
     use starknet::{account::Call, VALIDATED};
 
-    use sumo_account::account::interface::IAccount;
-
-    use sumo_account::session::{
+    use crate::sumo_account::{
+        account::interface::IAccount,
         session::{
-            session_component
-        },
-        interface::ISumoSession
+            session::{
+                session_component
+            },
+            interface::ISumoSession
+        }
     };
 
     // Signer storage

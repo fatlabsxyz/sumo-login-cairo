@@ -4,7 +4,7 @@ pub mod session_component {
     use starknet::storage::StoragePointerWriteAccess;
     use starknet::storage::StoragePointerReadAccess;
 
-    use sumo_account::session::interface::ISumoSession;
+    use crate::sumo_account::session::interface::ISumoSession;
 
     #[storage]
     pub struct Storage {

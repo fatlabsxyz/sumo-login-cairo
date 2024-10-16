@@ -1,11 +1,4 @@
-[workspace]
-members = [
-    "sumo_login",
-    "sumo_account"
-]
-
-
-[workspace.package]
+[package]
 name = "sumo_login_starknet"
 version = "0.1.0"
 edition = "2024_07"
@@ -14,7 +7,7 @@ edition = "2024_07"
 [scripts]
 test = "snforge test"
 
-[workspace.dependencies]
+[dependencies]
 starknet = "^2.8.0"
 
 [dev-dependencies]

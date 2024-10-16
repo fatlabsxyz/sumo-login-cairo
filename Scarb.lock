@@ -15,14 +15,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sumo_account"
-version = "0.1.0"
-dependencies = [
- "snforge_std",
-]
-
-[[package]]
-name = "sumo_login"
+name = "sumo_login_starknet"
 version = "0.1.0"
 dependencies = [
  "snforge_std",
