@@ -1,7 +1,7 @@
 use starknet::account::Call;
 
 #[starknet::interface]
-pub trait ISumoLoginAccount<TState> {
+pub trait IAccount<TState> {
     // ISRC6
     fn __execute__(self: @TState, calls: Array<Call>) -> Array<Span<felt252>>;
     fn __validate__(self: @TState, calls: Array<Call>) -> felt252;

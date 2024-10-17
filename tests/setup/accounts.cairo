@@ -4,7 +4,7 @@ use snforge_std::{
     DeclareResultTrait,
 };
 
-use sumo_login_starknet::sumo_login::account::interface::ISumoLoginAccount;
+use sumo_login_starknet::sumo_login::account::interface::IAccount;
 
 
 // TODO figure a way to mirror same interface from actual account
