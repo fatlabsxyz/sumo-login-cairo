@@ -2,40 +2,32 @@ use snforge_std::{
     declare,
     ContractClassTrait,
     DeclareResultTrait,
+    ContractClass,
 };
 
-// TODO figure a way to mirror same interface from actual account
-#[starknet::interface]
-trait ITestSumoLoginAccount<TContractState> {
-}
+use sumo_login_starknet::sumo_login::account::interface::{ILoginDispatcher};
+use sumo_login_starknet::sumo_account::account::interface::{IAccountDispatcher};
 
-// TODO figure a way to mirror same interface from actual account
-#[starknet::interface]
-trait ITestSumoAccount<TContractState> {
-}
+use crate::utils;
 
-pub fn setup_sumo_login() -> ITestSumoLoginAccountDispatcher {
-    let contract = declare("SumoLoginAccount").unwrap().contract_class();
-    let class_hash: felt252 = (*contract.class_hash).try_into().unwrap();
-    let account_address = 0b101010;
-    let mut calldata = array![];
-    println!("sumo_login class_hash {:?}", class_hash);
-    println!("sumo_login account_address {:?}", account_address);
-    let (contract_address, _) = contract
-        .deploy_at(@calldata, account_address.try_into().unwrap())
-        .expect('Couldnt deploy AccountPrototype');
-    ITestSumoLoginAccountDispatcher { contract_address }
-}
 
-pub fn setup_sumo_account() -> ITestSumoAccountDispatcher {
-    let contract = declare("SumoAccount").unwrap().contract_class();
-    let class_hash: felt252 = (*contract.class_hash).try_into().unwrap();
-    let account_address = 0x121212;
-    let mut calldata = array![];
-    println!("sumo_account class_hash {:?}", class_hash);
-    println!("sumo_account account_address {:?}", account_address);
-    let (contract_address, _) = contract
-        .deploy_at(@calldata, account_address.try_into().unwrap())
-        .expect('Couldnt deploy AccountPrototype');
-    ITestSumoAccountDispatcher { contract_address }
+pub fn setup_sumo_duo(address_seed: felt252) -> (ILoginDispatcher, IAccountDispatcher)  {
+
+    let _login_address = 0b101010;
+    let _account_address = 0x121212;
+
+    let (login_contract, _) = utils::declare_class("SumoLoginAccount");
+    let (account_contract, account_class_hash) = utils::declare_class("SumoAccount");
+
+    let mut login_calldata = array![
+        account_class_hash
+    ];
+    let login_address = utils::deploy(login_contract, _login_address, login_calldata);
+
+    let account_address = utils::deploy(account_contract, _account_address, array![]);
+
+    (
+        ILoginDispatcher { contract_address: login_address },
+        IAccountDispatcher { contract_address: account_address }
+    )
 }
