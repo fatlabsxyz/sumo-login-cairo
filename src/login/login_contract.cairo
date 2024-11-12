@@ -5,9 +5,9 @@ use core::hash::{HashStateTrait, HashStateExTrait};
 #[starknet::interface]
 pub trait ILogin<TContractState> {
     fn login(ref self: TContractState, user_address: felt252, new_pk:felt252) -> Span<felt252>;
-    fn deploy(ref self: TContractState) -> ContractAddress ;
+    fn deploy(ref self: TContractState, salt:felt252, arg1:felt252,arg2:felt252) -> ContractAddress ;
     fn get_deployed(self: @TContractState) -> Array<ContractAddress>;
-    fn get_deploy(self: @TContractState) -> ContractAddress;
+    fn get_targets(self: @TContractState) -> Array<ContractAddress>;
 }
 
 
@@ -15,6 +15,15 @@ pub trait ILogin<TContractState> {
 pub struct ConstructorCallData{
     arg1:felt252,
     arg2:felt252,
+}
+
+#[derive(Drop, Hash, Serde, Copy)]
+struct StructForHash {
+    prefix: felt252,
+    deployer_address: felt252,
+    salt: felt252,
+    class_hash:felt252,
+    constructor_calldata_hash:felt252,
 }
 
 trait ConstructorCallDataTrait{
@@ -30,7 +39,6 @@ impl ConstructorCallDataTraitImpl of ConstructorCallDataTrait{
         ];
         return array;
     }
-
     fn hash(self:ConstructorCallData) -> felt252{
         let hash = PedersenTrait::new(0).update_with(self).update_with(2).finalize();
         return hash;
@@ -43,7 +51,7 @@ impl ConstructorCallDataTraitImpl of ConstructorCallDataTrait{
 mod Login {
     use core::pedersen::PedersenTrait;
     use core::hash::{HashStateTrait, HashStateExTrait};
-    use super::{ConstructorCallData,ConstructorCallDataTraitImpl};
+    use super::{StructForHash, ConstructorCallData,ConstructorCallDataTraitImpl};
     use core::starknet::storage::{StoragePointerReadAccess,
         StoragePointerWriteAccess,
         StoragePathEntry,
@@ -52,13 +60,11 @@ mod Login {
         MutableVecTrait,
         Map
         };
-//    use core::starknet::get_contract_address;
     use core::starknet::{syscalls,SyscallResultTrait};
     use core::starknet::{ContractAddress};
     use core::starknet::class_hash::ClassHash;
 
     const DEPLOY_FEE: u64 = 1_000_000;
-    const SUMO_ACCOUNT_CLASS_HASH: felt252 = 0x009e7ef702d06b14118fdcfcfc5e1fed6252786a388b10fabc5f0af04f68e6f6;
 
     #[storage]
     struct Storage {
@@ -68,51 +74,35 @@ mod Login {
 
         //esta es temportal
         deployed: Vec<ContractAddress>,
-        deploy_one: ContractAddress,
+        target: Vec<ContractAddress>,
     }
 
-//    #[constructor]
-//    fn constructor(ref self: ContractState, sumo_account_class_hash: felt252) {
-//        self.sumo_account_class_hash.write(sumo_account_class_hash)
-//    }
-
-
-
-
-    #[derive(Drop, Hash, Serde, Copy)]
-    struct StructForHash {
-        prefix: felt252,
-        deployer_address: felt252,
-        salt: felt252,
-        class_hash:felt252,
-        constructor_calldata_hash:felt252,
+    #[constructor]
+    fn constructor(ref self: ContractState, sumo_account_class_hash: felt252) {
+        self.sumo_account_class_hash.write(sumo_account_class_hash)
     }
-    
 
     #[abi(embed_v0)]
     impl LoginImpl of super::ILogin<ContractState> {
-        fn get_deploy(self: @ContractState) -> ContractAddress {
-            self.deploy_one.read()
-        }
 
         fn get_deployed(self: @ContractState) -> Array<ContractAddress> {
             let mut addresses = array![];
-            for i in 1..self.deployed.len(){
+            for i in 0..self.deployed.len(){
                 addresses.append(self.deployed.at(i).read())
             };
             addresses
         }
 
-        fn login(
-                ref self:ContractState,
-                user_address:felt252,
-                new_pk:felt252,
-            )  -> Span<felt252> {
-                //Here usser_addres must be computable from tx_info
+        fn get_targets(self: @ContractState) -> Array<ContractAddress> {
+            let mut addresses = array![];
+            for i in 0..self.deployed.len(){
+                addresses.append(self.deployed.at(i).read())
+            };
+            addresses
+        }
+
+        fn login( ref self:ContractState, user_address:felt252, new_pk:felt252,)  -> Span<felt252> {
                 let address: ContractAddress = user_address.try_into().unwrap();
-//                if !self.user_list.entry(address).read() {
-//                    self.deploy()
-//                }
                 let calldata : Array<felt252> = array![new_pk];
                 let mut res = syscalls::call_contract_syscall(
                    address,
@@ -122,20 +112,20 @@ mod Login {
                 return res;
         }
 
-        fn deploy(ref self: ContractState) -> ContractAddress {
-//            let _class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
-            let class_hash : ClassHash = SUMO_ACCOUNT_CLASS_HASH.try_into().unwrap();
-            let salt:felt252 = 1234;
-            let arg1:felt252 = 1234;
-            let arg2:felt252 = 1234;
-            let salida:Array<felt252> = array![arg1, arg2];
-            let calldata =  salida.span();
-            let (address,_) = syscalls::deploy_syscall(class_hash,salt,calldata,core::bool::True).unwrap_syscall() ;
+        fn deploy(ref self: ContractState, salt:felt252, arg1:felt252, arg2:felt252) -> ContractAddress {
+            let class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
+            let constructor_arguments = ConstructorCallData {arg1: arg1, arg2:arg2};
+            let target_addres = self.precompute_account_address(salt, constructor_arguments);
+            let (address,_) = syscalls::deploy_syscall(class_hash,
+                    salt,
+                    constructor_arguments.to_array().span(),
+                    core::bool::True
+                ).unwrap_syscall();
 
+            self.target.append().write(target_addres.try_into().unwrap());
             self.deployed.append().write(address);
-            self.deploy_one.write(address);
+            self.user_list.entry(address).write(true);
 //            self.add_debt(address, DEPLOY_FEE);
-//            self.user_list.entry(address).write(true);
             address
         }
     }
@@ -146,12 +136,12 @@ mod Login {
             self.user_debt.entry(address).write(current_debt + value);
         }
 
-        fn precompute_account_address(ref self:ContractState, constructor_calldata: ConstructorCallData) -> felt252 {
+        fn precompute_account_address(ref self:ContractState,salt:felt252, constructor_calldata: ConstructorCallData) -> felt252 {
             let struct_to_hash = StructForHash { prefix: 'STARKNET_CONTRACT_ADDRESS',
                 deployer_address: 0,
-                salt: 1234,
-                class_hash: SUMO_ACCOUNT_CLASS_HASH,
-                constructor_calldata_hash: constructor_calldata.hash() ,
+                salt: salt,
+                class_hash: self.sumo_account_class_hash.read(),
+                constructor_calldata_hash: constructor_calldata.hash(),
             };
             let hash = PedersenTrait::new(0).update_with(struct_to_hash).update_with(5).finalize();
             return hash;
@@ -161,44 +151,3 @@ mod Login {
 
 }
 
-#[cfg(test)]
-mod tests {
-    use core::pedersen::PedersenTrait;
-    use core::hash::{HashStateTrait, HashStateExTrait};
-    const SUMO_ACCOUNT_CLASS_HASH: felt252 = 0x009e7ef702d06b14118fdcfcfc5e1fed6252786a388b10fabc5f0af04f68e6f6;
-
-    #[derive(Drop, Hash, Serde, Copy)]
-    struct CalldataForHash {
-        arg1:felt252,
-        arg2:felt252,
-    }
-
-
-    #[derive(Drop, Hash, Serde, Copy)]
-    struct StructForHash {
-        prefix: felt252,
-        deployer_address: felt252,
-        salt: felt252,
-        class_hash:felt252,
-        constructor_calldata_hash:felt252,
-    }
-
-    #[test]
-    fn precompute_account_address() {
-        //Target is the result of a deploy with calldata {arg1:1234, arg2:1234}
-        //This test passes. It depends of old data but it helps to understand the flow
-        let target: felt252 = 0x06515a87851fc1154f3604b3719c5db8d578b318afdbb69733e9ab930593e069;
-        let calldata_to_hash = CalldataForHash {arg1: 1234, arg2: 1234};
-        let constructor_calldata_hash = PedersenTrait::new(0).update_with(calldata_to_hash).update_with(2).finalize();
-
-        let struct_to_hash = StructForHash { prefix: 'STARKNET_CONTRACT_ADDRESS',
-            deployer_address: 0,
-            salt: 1234,
-            class_hash: SUMO_ACCOUNT_CLASS_HASH,
-            constructor_calldata_hash: constructor_calldata_hash ,
-        };
-        let hash = PedersenTrait::new(0).update_with(struct_to_hash).update_with(5).finalize();
-        println!("{:?}",hash);
-        assert_eq!(hash, target)
-    }
-}
