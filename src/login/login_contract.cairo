@@ -3,24 +3,26 @@ use core::starknet::account::Call;
 
 #[starknet::interface]
 pub trait ILogin<TContractState> {
-    fn login(ref self: TContractState, user_address: ContractAddress, eph_pkey:felt252) ;
-    //starkli requiere que le mandes dos felts para armar un u256
-    //starkli invoke ADDRESS deploy 1234 1234 1234 1234
-    fn deploy(ref self: TContractState, address_seed:u256, arg1: felt252, arg2:felt252 ) -> ContractAddress ;
+    fn is_valid_signature(self: @TContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252;
+    fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
+    fn __validate__(ref self: TContractState, calls: Span<Call>) -> felt252 ;
+    fn __validate_declare__(ref self: TContractState, declared_class_hash:felt252) -> felt252;
+
+    fn deploy(ref self: TContractState, salt:felt252) -> ContractAddress ;
+    fn login(ref self: TContractState, salt: felt252, eph_pkey:felt252) ;
+    fn update_oauth_public_key(ref self: TContractState);
+
+    //for testing
     fn get_deployed(self: @TContractState) -> Array<ContractAddress>;
     fn get_targets(self: @TContractState) -> Array<ContractAddress>;
     fn get_declared_address(self: @TContractState) -> felt252;
-    fn __validate__(self: @TContractState, calls: Span<Call>) -> felt252 ;
-    fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
-    fn __validate_declare__(ref self: TContractState, declared_class_hash:felt252) -> felt252;
-    fn is_valid_signature(self: @TContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252;
 }
 
 
 #[starknet::contract(account)]
 mod Login {
     use crate::utils::{StructForHashImpl, ConstructorCallDataImpl, PublicInputImpl};
-//    use crate::utils::{PublicInputs};
+    use crate::utils::{PublicInputs,StructForHash};
     use core::starknet::storage::{StoragePointerReadAccess,
         StoragePointerWriteAccess,
         StoragePathEntry,
@@ -38,8 +40,10 @@ mod Login {
     use core::starknet::{get_caller_address, get_tx_info, get_block_number};
     use core::num::traits::Zero;
 
+    const GARAGA_VERIFY_CLASSHASH: felt252 = 0x640bdf3362f2de1e043bd158fb00297099a35f600edb6acdd56149c4dc0a459;
     const PKEY: felt252 = 0x6363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f;
     const DEPLOY_FEE: u64 = 1_000_000;
+    const LOGIN_FEE: u64 = 1_000_000;
 
     #[storage]
     struct Storage {
@@ -47,6 +51,7 @@ mod Login {
         sumo_account_class_hash: felt252,
         user_debt: Map<ContractAddress, u64>,
         user_list: Map<ContractAddress, bool>,
+        oauth_public_key: felt252,
 
         //esta es temportal
         deployed: Vec<ContractAddress>,
@@ -65,19 +70,27 @@ mod Login {
             //No es necesario que use este contrato para delcarar el account, lo hago ahora
             //para que sea mas facil y rapido testear y tener guardado el class_hash de la account
             //se le puede pasar como constructor argument a este o hardcodearlo una vez declarado el otro.
+            //sospecho que eso es mejor, si se llega a decalra otro contrato desde este, se va a perder para siempre
+            //este campo
             self.sumo_account_class_hash.write(declared_class_hash);
             VALIDATED
         }
 
-        fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
+        fn __validate__(ref self: ContractState, calls: Span<Call>) -> felt252 {
+            println!("Entering __validate__");
+            //Ver que hacer con las multicalls
+            assert(calls.len()==1,'Multicalls not allowed');
+            let call:Call = *calls[0];
             self.only_protocol();
             self.validate_tx_version();
             self.validate_tx_signature();
-            //validate_garaga
-            //validate inputs == validated_inpusts_garaga
-            //Cuando sale de aca se tiene que estar seguro que es valido tomar los inputs del calldata
-            //No deberiamos correr el validador de garaga en el execute otra vez
-            let public_inputs = PublicInputImpl::new(
+            let selector = call.selector;
+            if  (selector != selector!("login")) & (selector != selector!("deploy")) {
+                println!("leaving __validate__ without login/deploy validation");
+                return VALIDATED;
+            }
+            //Reconstuir este struct desde el calldata
+            let public_inputs = PublicInputs{
                 eph_public_key0: 1234,
                 eph_public_key1: 1234,
                 address_seed: 1234,
@@ -86,19 +99,33 @@ mod Login {
                 iss_index_in_payload_mod_4: 1234,
                 header_F: 1234,
                 modulus_F: 1234
-            );
-            //Aca tenemos que hacer que el verifier de garaca devuelva la estructira PublicInputs
-            //O armar un metodo from garaga en PublicInputs
+            };
+            //validate_garaga
+            //let public_inputs_verified = self.garaga_verify_get_public_inputs(ACOMODAR EL INPUT);
             let public_inputs_verified = public_inputs.clone();
-            //Esto verifica que la prueva que viene en el calldata corresponde a los inputs que vienen en el calldata
-            assert(public_inputs.all_inputs_hash()== public_inputs_verified.all_inputs_hash(),
-                'AIH not matching');
+
+            assert(public_inputs.all_inputs_hash() == public_inputs_verified.all_inputs_hash(), 'AIH not matching');
             let max_block = public_inputs.max_epoch;
             self.validate_block_time(max_block,get_block_number());
+
+            let salt = call.calldata.at(0).clone();
+            let target_address = self.precompute_account_address(salt);
+            println!("Validate Address {:?}",target_address);
+            if selector == selector!("deploy") {
+                let is_user = self.user_list.entry(target_address).read();
+                assert(!is_user, 'Allready an user');
+                //TODO: este assert no funciona por algun motivo
+            }
+            if selector == selector!("login"){
+                let debt = self.user_debt.entry(target_address).read();
+                assert(debt == 0, 'User has a debt');
+            }
+            println!("leaving __validate__");
             VALIDATED
         }
 
         fn __execute__(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
+            println!("entering __execute__");
             self.only_protocol();
             self.validate_tx_version();
             self.execute_calls(calls)
@@ -123,31 +150,33 @@ mod Login {
             self.sumo_account_class_hash.read()
         }
 
-        fn login( ref self:ContractState, user_address: ContractAddress, eph_pkey:felt252,) {
+        fn login( ref self:ContractState, salt: felt252, eph_pkey:felt252,) {
             //Aca se tiene que reconstuir la address partiendo del tx_info
+            let user_address: ContractAddress = self.precompute_account_address(salt);
             assert(self.user_list.entry(user_address).read() ,'Loggin: not a sumoer' );
-            self.set_user_pkey(user_address, eph_pkey )
-//            self.add_debt(user_address, DEPLOY_FEE);
+            self.set_user_pkey(user_address, eph_pkey);
+            self.add_debt(user_address,LOGIN_FEE);
         }
 
-        fn deploy(ref self: ContractState, address_seed: u256, arg1:felt252, arg2:felt252) -> ContractAddress {
+        fn deploy(ref self: ContractState, salt: felt252) -> ContractAddress {
             let eph_pkey: felt252 = 12345;
-            let salt = self.salt_from_address_seed(address_seed);
-            let calldata = array![arg1, arg2];
-            let span = calldata.span();
+            let constructor_arguments = array![1234,1234];
             let class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
             let (address,_) = syscalls::deploy_syscall(class_hash,
                     salt,
-                    span,
+                    constructor_arguments.span(),
                     core::bool::True
                 ).unwrap_syscall();
-
+            println!("Actual Address {:?}",address);
             self.deployed.append().write(address);
             self.user_list.entry(address).write(true);
             self.set_user_pkey(address, eph_pkey);
+            self.add_debt(address,DEPLOY_FEE);
             //This is for testing
-            let target_address = self.precompute_account_address(salt, calldata);
-            self.target.append().write(target_address.try_into().unwrap());
+            let target_address = self.precompute_account_address(salt);
+            println!("Target Address {:?}",target_address);
+            self.target.append().write(target_address);
+            assert(target_address==address,'Addresses dont match');
             //
 
             address
@@ -164,6 +193,14 @@ mod Login {
                 0
             }
         }
+
+        fn  update_oauth_public_key(ref self: ContractState) {
+            let old_key = self.oauth_public_key.read();
+            let new_key = self.oracle_check();
+            if old_key != new_key{
+                self.oauth_public_key.write(new_key)
+            }
+        }
     }
 
     #[generate_trait]
@@ -173,16 +210,18 @@ mod Login {
             self.user_debt.entry(address).write(current_debt + value);
         }
 
-        fn precompute_account_address(ref self:ContractState,salt:felt252, calldata: Array<felt252>) -> felt252 {
-            let constructor_calldata_hash = ConstructorCallDataImpl::from_array(calldata).hash();
-            let struct_to_hash = StructForHashImpl::new (
+        fn precompute_account_address(ref self:ContractState,salt:felt252) -> ContractAddress {
+            let constructor_arguments: Array<felt252> = array![1234,1234];
+            let constructor_calldata_hash = ConstructorCallDataImpl::from_array(constructor_arguments).hash();
+            let struct_to_hash = StructForHash {
                 prefix: 'STARKNET_CONTRACT_ADDRESS',
                 deployer_address: 0,
                 salt: salt,
                 class_hash: self.sumo_account_class_hash.read(),
                 constructor_calldata_hash: constructor_calldata_hash,
-            );
-            struct_to_hash.hash()
+            };
+            let hash = struct_to_hash.hash();
+            hash.try_into().unwrap()
         }
 
         fn only_protocol(self: @ContractState) {
@@ -222,7 +261,7 @@ mod Login {
             res
         }
 
-        fn set_user_pkey(ref self: ContractState, user_address:ContractAddress, eph_pkey: felt252){
+        fn set_user_pkey(ref self: ContractState, user_address:ContractAddress, eph_pkey: felt252) {
             let calldata : Array<felt252> = array![eph_pkey];
                 syscalls::call_contract_syscall(
                    user_address,
@@ -243,6 +282,32 @@ mod Login {
             let masked_max_block: u64 = max_block.try_into().unwrap();
             assert(current_block_number <= masked_max_block,'Proof expired');
             VALIDATED
+        }
+
+        fn garaga_verify_get_public_inputs(
+            self: @ContractState, calldata: Span<felt252>
+        ) -> PublicInputs {
+            //println!("{:?}", calldata.slice(0, 4));
+            let mut _res = core::starknet::syscalls::library_call_syscall(
+                GARAGA_VERIFY_CLASSHASH.try_into().unwrap(),
+                selector!("verify_groth16_proof_bn254"),
+                calldata
+            )
+                .unwrap_syscall();
+            let (verified, res) = Serde::<(bool, Span<u256>)>::deserialize(ref _res).unwrap();
+            assert(verified,'Garagant');
+            //return res;
+            //TODO: Esto no fue testeado, habria que compilar y levantar el contrato de garaga?
+            return PublicInputImpl::from_span(res);
+        }
+
+        fn oracle_check(self: @ContractState)  -> felt252 {
+//            core::starknet::syscalls::call_contract_syscall(
+//                ORACLE_ADDRESS.try_into().unwrap(), selector!("get"), ArrayTrait::new().span()
+//            )
+//                .unwrap_syscall();
+            let key:felt252 = 123456;
+            return key;
         }
     }
 

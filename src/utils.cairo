@@ -4,43 +4,33 @@ use core::sha256::compute_sha256_byte_array;
 
 #[derive(Drop, Hash, Serde, Copy)]
 pub struct ConstructorCallData{
-    arg1:felt252,
-    arg2:felt252,
+    pub arg1:felt252,
+    pub arg2:felt252,
 }
 
 #[derive(Drop, Hash, Serde, Copy)]
 pub struct StructForHash {
-    prefix: felt252,
-    deployer_address: felt252,
-    salt: felt252,
-    class_hash:felt252,
-    constructor_calldata_hash:felt252,
+    pub prefix: felt252,
+    pub deployer_address: felt252,
+    pub salt: felt252,
+    pub class_hash:felt252,
+    pub constructor_calldata_hash:felt252,
 }
 
 #[derive(Drop, Hash, Serde, Copy)]
 pub struct PublicInputs {
-    eph_public_key0: u256,
-    eph_public_key1: u256,
-    address_seed: u256,
+    pub eph_public_key0: u256,
+    pub eph_public_key1: u256,
+    pub address_seed: u256,
     pub max_epoch: u256,
-    iss_b64_F: u256,
-    iss_index_in_payload_mod_4: u256,
-    header_F: u256,
-    modulus_F: u256,
+    pub iss_b64_F: u256,
+    pub iss_index_in_payload_mod_4: u256,
+    pub header_F: u256,
+    pub modulus_F: u256,
 }
 
 #[generate_trait]
 pub impl StructForHashImpl of StrucForHashTrait {
-    fn new(
-            prefix:felt252,
-            deployer_address: felt252,
-            salt:felt252,
-            class_hash:felt252,
-            constructor_calldata_hash:felt252
-        )-> StructForHash {
-           StructForHash {prefix, deployer_address, salt, class_hash, constructor_calldata_hash}
-    }
-    
     fn hash(self:StructForHash) -> felt252{
         let hash = PedersenTrait::new(0).update_with(self).update_with(5).finalize();
         return hash;
@@ -73,6 +63,18 @@ pub impl ConstructorCallDataImpl of ConstructorCallDataTrait{
 
 #[generate_trait]
 pub impl PublicInputImpl of PublicInputTrait {
+    fn from_span(span_inputs: Span<u256>) -> PublicInputs {
+        PublicInputs {
+            eph_public_key0: *span_inputs.at(0),
+            eph_public_key1:  *span_inputs.at(0),
+            address_seed:  *span_inputs.at(0),
+            max_epoch:  *span_inputs.at(0),
+            iss_b64_F:  *span_inputs.at(0),
+            iss_index_in_payload_mod_4:  *span_inputs.at(0),
+            header_F:  *span_inputs.at(0),
+            modulus_F:  *span_inputs.at(0),
+        }
+    }
     fn into_span(self: PublicInputs) -> Span<u256> {
         array![
             self.eph_public_key0,
@@ -106,27 +108,11 @@ pub impl PublicInputImpl of PublicInputTrait {
         return all_inputs_hash;
     }
 
-    fn new(
-        eph_public_key0: u256,
-        eph_public_key1: u256,
-        address_seed: u256,
-        max_epoch: u256,
-        iss_b64_F: u256,
-        iss_index_in_payload_mod_4: u256,
-        header_F: u256,
-        modulus_F: u256
-        ) -> PublicInputs {
-            PublicInputs {
-                eph_public_key0,
-                eph_public_key1,
-                address_seed,
-                max_epoch,
-                iss_b64_F,
-                iss_index_in_payload_mod_4,
-                header_F,
-                modulus_F
-            }
-        }
+    fn salt_from_address_seed(self: PublicInputs) -> felt252 {
+        let MASK_250: u256 = 1809251394333065553493296640760748560207343510400633813116524750123642650623;
+        let masked_address_seed: felt252 = (self.address_seed & MASK_250).try_into().unwrap();
+        return masked_address_seed;
+    }
 }
 
 

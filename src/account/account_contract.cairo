@@ -22,9 +22,11 @@ trait ExternalTrait<TContractState> {
 
 #[starknet::contract(account)]
 mod Account {
+    const DEPLOY_FEE: u64 = 1_000_000;
     const LOGIN_FEE: u64 = 1_000_000;
+    const ETH_ADDRRESS: felt252= 0x49D36570D4E46F48E99674BD3FCC84644DDD6B96F7C741B1562B82F9E004DC7;
     use core::ecdsa::check_ecdsa_signature;
-    use core::starknet::{SyscallResultTrait};
+    use core::starknet::{syscalls,SyscallResultTrait};
     use core::starknet::{ContractAddress};
     use core::starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use core::starknet::{get_caller_address, get_tx_info, VALIDATED};
@@ -42,8 +44,11 @@ mod Account {
     fn constructor(ref self: ContractState, arg1:felt252, arg2:felt252) -> ContractAddress {
         //Might be the universal deployer address if deploy is made with a DEPLOY_ACCOUNT transaction
         //If the deploy is made with an INVOKE transaction the caller addres is the sumo_Login address.
+        //Si se cambian la cantidad de argumentos del constructor recordar que el hash finaliza con hash(cantidad),
+        //andar a cambiarlo
         let deployer_address = get_caller_address();
         self.deployer_address.write(deployer_address);
+        self.sumo_debt.write(DEPLOY_FEE);
         //Esto va a cambiar
         deployer_address
     }
@@ -133,9 +138,17 @@ mod Account {
         fn pay_debt(ref self: ContractState) {
             let debt = self.sumo_debt.read();
             if debt > 0 {
-                let _sumo = self.deployer_address.read();
+                let ammount: felt252 = debt.try_into().unwrap();
+                let sumo_address = self.deployer_address.read();
+                //TODO: Pasar debt (u256) to 2 felt252
+                let calldata:Array<felt252> = array![sumo_address.into(), ammount];
                 //transfer to sumo the debt
-                //if transfer succeded
+                syscalls::call_contract_syscall(
+                   ETH_ADDRRESS.try_into().unwrap(),
+                   selector!("transfer"),
+                   calldata.span()
+                ).unwrap_syscall();
+                //TODO: if transfer succeded
                 self.sumo_debt.write(0)
             }
         }
