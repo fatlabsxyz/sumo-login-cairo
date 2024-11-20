@@ -1,1 +1,1 @@
-mod login_contract;
+pub mod login_contract;

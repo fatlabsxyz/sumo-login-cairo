@@ -9,8 +9,10 @@ pub trait ILogin<TContractState> {
     fn __validate_declare__(ref self: TContractState, declared_class_hash:felt252) -> felt252;
 
     fn deploy(ref self: TContractState, salt:felt252) -> ContractAddress ;
-    fn login(ref self: TContractState, salt: felt252, eph_pkey:felt252) ;
+    fn login(ref self: TContractState, salt:felt252, eph_pkey:felt252) ;
     fn update_oauth_public_key(ref self: TContractState);
+    fn get_user_debt(self: @TContractState, user_address:felt252) -> u64;
+    fn collect_debt(ref self: TContractState, user_address:felt252);
 
     //for testing
     fn get_deployed(self: @TContractState) -> Array<ContractAddress>;
@@ -37,7 +39,8 @@ mod Login {
     use core::starknet::class_hash::ClassHash;
     use core::starknet::VALIDATED;
     use core::starknet::account::Call;
-    use core::starknet::{get_caller_address, get_tx_info, get_block_number};
+    use core::starknet::{get_caller_address, get_tx_info, get_block_number, get_contract_address};
+    use core::starknet::TxInfo;
     use core::num::traits::Zero;
 
     const GARAGA_VERIFY_CLASSHASH: felt252 = 0x640bdf3362f2de1e043bd158fb00297099a35f600edb6acdd56149c4dc0a459;
@@ -66,6 +69,7 @@ mod Login {
     #[abi(embed_v0)]
     impl LoginImpl of super::ILogin<ContractState> {
         fn __validate_declare__(ref self: ContractState, declared_class_hash: felt252) -> felt252 {
+            println!("entering __validate_declare__");
             //Agregar validates aca o nos van a limpiar declarando contratos.
             //No es necesario que use este contrato para delcarar el account, lo hago ahora
             //para que sea mas facil y rapido testear y tener guardado el class_hash de la account
@@ -73,19 +77,23 @@ mod Login {
             //sospecho que eso es mejor, si se llega a decalra otro contrato desde este, se va a perder para siempre
             //este campo
             self.sumo_account_class_hash.write(declared_class_hash);
+            println!("leaving: __validate_declare__");
             VALIDATED
         }
 
         fn __validate__(ref self: ContractState, calls: Span<Call>) -> felt252 {
-            println!("Entering __validate__");
+            //recordar que en el __validate__ cuando se ejecuta de forma automatica el 
+            //caller_address es 0. Si se quiere el addres del que origina la transaccion hay que buscarlo
+            //en el tx_info
+            println!("entering __validate__");
             //Ver que hacer con las multicalls
             assert(calls.len()==1,'Multicalls not allowed');
             let call:Call = *calls[0];
             self.only_protocol();
             self.validate_tx_version();
-            self.validate_tx_signature();
             let selector = call.selector;
             if  (selector != selector!("login")) & (selector != selector!("deploy")) {
+                self.validate_tx_signature();
                 println!("leaving __validate__ without login/deploy validation");
                 return VALIDATED;
             }
@@ -107,20 +115,24 @@ mod Login {
             assert(public_inputs.all_inputs_hash() == public_inputs_verified.all_inputs_hash(), 'AIH not matching');
             let max_block = public_inputs.max_epoch;
             self.validate_block_time(max_block,get_block_number());
-
+            //let salt= public_inputs.add
             let salt = call.calldata.at(0).clone();
             let target_address = self.precompute_account_address(salt);
+
+            let address_origin= get_tx_info().unbox().account_contract_address ;
+            println!("{:?}", address_origin);
+            println!("{:?}", get_contract_address());
+            assert(address_origin == get_contract_address(), 'Not Allowed');
             println!("Validate Address {:?}",target_address);
             if selector == selector!("deploy") {
                 let is_user = self.user_list.entry(target_address).read();
                 assert(!is_user, 'Allready an user');
-                //TODO: este assert no funciona por algun motivo
             }
             if selector == selector!("login"){
                 let debt = self.user_debt.entry(target_address).read();
                 assert(debt == 0, 'User has a debt');
             }
-            println!("leaving __validate__");
+            println!("leaving __validate__ for deploy/login");
             VALIDATED
         }
 
@@ -150,15 +162,18 @@ mod Login {
             self.sumo_account_class_hash.read()
         }
 
-        fn login( ref self:ContractState, salt: felt252, eph_pkey:felt252,) {
+        fn login(ref self:ContractState, salt: felt252, eph_pkey:felt252,) {
+            println!("entering: login");
             //Aca se tiene que reconstuir la address partiendo del tx_info
             let user_address: ContractAddress = self.precompute_account_address(salt);
             assert(self.user_list.entry(user_address).read() ,'Loggin: not a sumoer' );
             self.set_user_pkey(user_address, eph_pkey);
             self.add_debt(user_address,LOGIN_FEE);
+            println!("leaving: login");
         }
 
         fn deploy(ref self: ContractState, salt: felt252) -> ContractAddress {
+            println!("entering: deploy");
             let eph_pkey: felt252 = 12345;
             let constructor_arguments = array![1234,1234];
             let class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
@@ -167,7 +182,6 @@ mod Login {
                     constructor_arguments.span(),
                     core::bool::True
                 ).unwrap_syscall();
-            println!("Actual Address {:?}",address);
             self.deployed.append().write(address);
             self.user_list.entry(address).write(true);
             self.set_user_pkey(address, eph_pkey);
@@ -177,8 +191,7 @@ mod Login {
             println!("Target Address {:?}",target_address);
             self.target.append().write(target_address);
             assert(target_address==address,'Addresses dont match');
-            //
-
+            println!("leaving: deploy");
             address
         }
 
@@ -194,6 +207,33 @@ mod Login {
             }
         }
 
+        fn get_user_debt(self: @ContractState, user_address:felt252) -> u64 {
+            println!("entering: get_user_debt");
+            let caller: ContractAddress = user_address.try_into().unwrap();
+            let debt = self.user_debt.entry(caller).read();
+            println!("entering: get_user_debt");
+            debt
+        }
+
+        fn collect_debt(ref self: ContractState, user_address:felt252) {
+            println!("entering: collect_debt");
+            let user_address: ContractAddress = OptionTrait::unwrap(user_address.try_into());
+            let caller = get_caller_address();
+            if (caller != user_address) & (caller != get_contract_address()){
+                assert(false,'you are not allowed');
+            }
+            let debt = self.user_debt.entry(user_address).read();
+            if debt <= 0 { assert(false,'user has no debt') }
+            let debt:felt252 = debt.try_into().unwrap();
+            syscalls::call_contract_syscall(
+               user_address,
+               selector!("cancel_debt"),
+               array![debt].span()
+            ).unwrap_syscall();
+            self.user_debt.entry(user_address).write(0);
+            println!("leaving: collect_debt");
+        }
+
         fn  update_oauth_public_key(ref self: ContractState) {
             let old_key = self.oauth_public_key.read();
             let new_key = self.oracle_check();
@@ -206,6 +246,7 @@ mod Login {
     #[generate_trait]
     pub impl PrivateImpl of IPrivate {
         fn add_debt(ref self: ContractState, address: ContractAddress, value: u64) {
+            println!("adding debt");
             let current_debt: u64 = self.user_debt.entry(address).read();
             self.user_debt.entry(address).write(current_debt + value);
         }
