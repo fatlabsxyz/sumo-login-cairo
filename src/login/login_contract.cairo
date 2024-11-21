@@ -55,6 +55,7 @@ mod Login {
         user_debt: Map<ContractAddress, u64>,
         user_list: Map<ContractAddress, bool>,
         oauth_public_key: felt252,
+        first_deploy:bool,
 
         //esta es temportal
         deployed: Vec<ContractAddress>,
@@ -69,70 +70,31 @@ mod Login {
     #[abi(embed_v0)]
     impl LoginImpl of super::ILogin<ContractState> {
         fn __validate_declare__(ref self: ContractState, declared_class_hash: felt252) -> felt252 {
+            self.only_protocol();
+            self.validate_tx_signature();
             println!("entering __validate_declare__");
-            //Agregar validates aca o nos van a limpiar declarando contratos.
-            //No es necesario que use este contrato para delcarar el account, lo hago ahora
-            //para que sea mas facil y rapido testear y tener guardado el class_hash de la account
-            //se le puede pasar como constructor argument a este o hardcodearlo una vez declarado el otro.
-            //sospecho que eso es mejor, si se llega a decalra otro contrato desde este, se va a perder para siempre
-            //este campo
+            assert(!self.first_deploy.read(), 'Only one deploy allowed');
             self.sumo_account_class_hash.write(declared_class_hash);
+            self.first_deploy.write(true);
             println!("leaving: __validate_declare__");
             VALIDATED
         }
 
         fn __validate__(ref self: ContractState, calls: Span<Call>) -> felt252 {
-            //recordar que en el __validate__ cuando se ejecuta de forma automatica el 
-            //caller_address es 0. Si se quiere el addres del que origina la transaccion hay que buscarlo
-            //en el tx_info
             println!("entering __validate__");
-            //Ver que hacer con las multicalls
-            assert(calls.len()==1,'Multicalls not allowed');
-            let call:Call = *calls[0];
             self.only_protocol();
             self.validate_tx_version();
-            let selector = call.selector;
-            if  (selector != selector!("login")) & (selector != selector!("deploy")) {
-                self.validate_tx_signature();
-                println!("leaving __validate__ without login/deploy validation");
-                return VALIDATED;
-            }
-            //Reconstuir este struct desde el calldata
-            let public_inputs = PublicInputs{
-                eph_public_key0: 1234,
-                eph_public_key1: 1234,
-                address_seed: 1234,
-                max_epoch: 1234,
-                iss_b64_F: 1234,
-                iss_index_in_payload_mod_4: 1234,
-                header_F: 1234,
-                modulus_F: 1234
+            for call in calls { 
+                let selector = *call.selector;
+                if  (selector != selector!("login")) & (selector != selector!("deploy")) {
+                    self.validate_tx_signature();
+                    println!("leaving __validate__ without login/deploy validation");
+                } else {
+                    self.only_self_call(*call);
+                    self.validate_login_deploy_call(*call);
+                    println!("leaving __validate__ with login/deploy validation");
+                }
             };
-            //validate_garaga
-            //let public_inputs_verified = self.garaga_verify_get_public_inputs(ACOMODAR EL INPUT);
-            let public_inputs_verified = public_inputs.clone();
-
-            assert(public_inputs.all_inputs_hash() == public_inputs_verified.all_inputs_hash(), 'AIH not matching');
-            let max_block = public_inputs.max_epoch;
-            self.validate_block_time(max_block,get_block_number());
-            //let salt= public_inputs.add
-            let salt = call.calldata.at(0).clone();
-            let target_address = self.precompute_account_address(salt);
-
-            let address_origin= get_tx_info().unbox().account_contract_address ;
-            println!("{:?}", address_origin);
-            println!("{:?}", get_contract_address());
-            assert(address_origin == get_contract_address(), 'Not Allowed');
-            println!("Validate Address {:?}",target_address);
-            if selector == selector!("deploy") {
-                let is_user = self.user_list.entry(target_address).read();
-                assert(!is_user, 'Allready an user');
-            }
-            if selector == selector!("login"){
-                let debt = self.user_debt.entry(target_address).read();
-                assert(debt == 0, 'User has a debt');
-            }
-            println!("leaving __validate__ for deploy/login");
             VALIDATED
         }
 
@@ -182,15 +144,16 @@ mod Login {
                     constructor_arguments.span(),
                     core::bool::True
                 ).unwrap_syscall();
-            self.deployed.append().write(address);
             self.user_list.entry(address).write(true);
             self.set_user_pkey(address, eph_pkey);
             self.add_debt(address,DEPLOY_FEE);
+
             //This is for testing
+            self.deployed.append().write(address);
             let target_address = self.precompute_account_address(salt);
-            println!("Target Address {:?}",target_address);
             self.target.append().write(target_address);
             assert(target_address==address,'Addresses dont match');
+
             println!("leaving: deploy");
             address
         }
@@ -211,7 +174,7 @@ mod Login {
             println!("entering: get_user_debt");
             let caller: ContractAddress = user_address.try_into().unwrap();
             let debt = self.user_debt.entry(caller).read();
-            println!("entering: get_user_debt");
+            println!("leaving: get_user_debt");
             debt
         }
 
@@ -349,6 +312,42 @@ mod Login {
 //                .unwrap_syscall();
             let key:felt252 = 123456;
             return key;
+        }
+
+        fn only_self_call(self: @ContractState, call: Call) {
+            let target_address: ContractAddress = call.to;
+            assert(target_address == get_contract_address(), 'Not Allowed Outside Call');
+        }
+
+        fn validate_login_deploy_call(ref self: ContractState, call:Call) {
+            let public_inputs = PublicInputs{
+                eph_public_key0: 1234,
+                eph_public_key1: 1234,
+                address_seed: 1234,
+                max_epoch: 1234,
+                iss_b64_F: 1234,
+                iss_index_in_payload_mod_4: 1234,
+                header_F: 1234,
+                modulus_F: 1234
+            };
+            //validate_garaga
+            //let public_inputs_verified = self.garaga_verify_get_public_inputs(ACOMODAR EL INPUT);
+            let public_inputs_verified = public_inputs.clone();
+
+            assert(public_inputs.all_inputs_hash() == public_inputs_verified.all_inputs_hash(), 'AIH not matching');
+            let max_block = public_inputs.max_epoch;
+            self.validate_block_time(max_block,get_block_number());
+            let salt = call.calldata.at(0).clone();
+            let target_address = self.precompute_account_address(salt);
+
+            if call.selector == selector!("deploy") {
+                let is_user = self.user_list.entry(target_address).read();
+                assert(!is_user, 'Allready an user');
+            }
+            if call.selector == selector!("login"){
+                let debt = self.user_debt.entry(target_address).read();
+                assert(debt == 0, 'User has a debt');
+            }
         }
     }
 
