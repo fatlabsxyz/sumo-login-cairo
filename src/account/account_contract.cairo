@@ -1,7 +1,6 @@
 use core::starknet::{ContractAddress};
 use starknet::account::Call;
 
-
 #[starknet::interface]
 pub trait ExternalTrait<TContractState> {
     //standar interface
@@ -10,9 +9,9 @@ pub trait ExternalTrait<TContractState> {
     fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
 
     //required by sumo
-    fn change_pkey(ref self: TContractState, new_key: felt252);
+    fn change_pkey(ref self: TContractState, new_key: felt252, expiration_block:felt252);
     fn get_my_debt(self: @TContractState) -> u64;
-    fn cancel_debt(ref self: TContractState, amount:felt252);
+    fn cancel_debt(self: @TContractState, amount:felt252);
 
     //for testing
     fn get_pkey(self: @TContractState) -> felt252;
@@ -26,7 +25,7 @@ pub mod Account {
     use core::starknet::{syscalls,SyscallResultTrait};
     use core::starknet::{ContractAddress};
     use core::starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use core::starknet::{get_caller_address, get_tx_info, VALIDATED, get_contract_address};
+    use core::starknet::{get_caller_address, get_tx_info, VALIDATED, get_contract_address, get_block_number};
     use core::num::traits::Zero;
     use starknet::account::Call;
 
@@ -34,11 +33,12 @@ pub mod Account {
     struct Storage {
         public_key: felt252,
         deployer_address: ContractAddress,
+        expiration_block: u64,
     }
 
     #[constructor]
     fn constructor(ref self: ContractState, arg1:felt252, arg2:felt252) -> ContractAddress {
-        println!("entering: constructor");
+//        println!("entering: constructor");
         //Might be the universal deployer address if deploy is made with a DEPLOY_ACCOUNT transaction
         //If the deploy is made with an INVOKE transaction the caller addres is the sumo_Login address.
         //Si se cambian la cantidad de argumentos del constructor recordar que el hash finaliza con hash(cantidad),
@@ -46,7 +46,7 @@ pub mod Account {
         let deployer_address = get_caller_address();
         self.deployer_address.write(deployer_address);
         //Esto va a cambiar
-        println!("leaving: constructor");
+//        println!("leaving: constructor");
         deployer_address
     }
 
@@ -62,18 +62,19 @@ pub mod Account {
             }
         }
 
-        fn change_pkey(ref self: ContractState, new_key: felt252) {
-            println!("entering change_pkey");
+        fn change_pkey(ref self: ContractState, new_key: felt252, expiration_block:felt252) {
+//            println!("entering change_pkey");
             let caller = get_caller_address();
             if caller == get_contract_address() {
                 self.public_key.write(new_key);
+                self.expiration_block.write(expiration_block.try_into().unwrap());
             } else if caller == self.deployer_address.read() {
                 self.public_key.write(new_key);
-                self.get_my_debt();
+                self.expiration_block.write(expiration_block.try_into().unwrap());
             } else {
                 assert(false, 'Not allowed to set pkey');
             }
-            println!("leaving: change_pkey");
+//            println!("leaving: change_pkey");
         }
 
 
@@ -89,6 +90,7 @@ pub mod Account {
             self.only_protocol();
             self.validate_tx_version();
             self.validate_tx_signature();
+            self.validate_block_time();
             VALIDATED
         }
 
@@ -100,7 +102,7 @@ pub mod Account {
         }
 
         fn get_my_debt(self: @ContractState) -> u64 {
-            println!("entering: get_my_debt");
+//            println!("entering: get_my_debt");
             let to = self.deployer_address.read();
             let res = syscalls::call_contract_syscall(
                to,
@@ -108,12 +110,12 @@ pub mod Account {
                array![get_contract_address().into()].span()
             ).unwrap_syscall();
             let debt:u64 = (*res.at(0)).try_into().unwrap();
-            println!("leaving: get_my_debt");
+//            println!("leaving: get_my_debt");
             debt
         }
 
-        fn cancel_debt(ref self: ContractState, amount:felt252) {
-            println!("entering: cancel_debt");
+        fn cancel_debt(self: @ContractState, amount:felt252) {
+//            println!("entering: cancel_debt");
             let amount:u256 = OptionTrait::unwrap(amount.try_into());
             let low:felt252 = amount.low.into();
             let high:felt252 = amount.high.into();
@@ -126,7 +128,7 @@ pub mod Account {
                selector!("transfer"),
                calldata.span()
             ).unwrap_syscall();
-            println!("leaving: cancel_debt");
+//            println!("leaving: cancel_debt");
         }
     }
 
@@ -170,7 +172,16 @@ pub mod Account {
             assert(self.is_valid_signature(tx_hash,signature.into())==VALIDATED, 'Wrong: Signature');
         }
 
-        fn pay_debt(ref self: ContractState) {
+        fn validate_block_time(self: @ContractState) {
+            let max_block = self.expiration_block.read();
+            if max_block != 0 {
+                let current = get_block_number();
+                assert(max_block > current, 'Expirated Login')
+            }
+        }
+
+
+        fn pay_debt(self: @ContractState) {
             let debt = self.get_my_debt();
             if debt > 0 {
                 //TODO: checkear que tengas plata antes

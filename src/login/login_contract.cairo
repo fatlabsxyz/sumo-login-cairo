@@ -5,11 +5,11 @@ use core::starknet::account::Call;
 pub trait ILogin<TContractState> {
     fn is_valid_signature(self: @TContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252;
     fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
-    fn __validate__(ref self: TContractState, calls: Span<Call>) -> felt252 ;
+    fn __validate__(self: @TContractState, calls: Span<Call>) -> felt252 ;
     fn __validate_declare__(ref self: TContractState, declared_class_hash:felt252) -> felt252;
 
     fn deploy(ref self: TContractState, salt:felt252) -> ContractAddress ;
-    fn login(ref self: TContractState, salt:felt252, eph_pkey:felt252) ;
+    fn login(ref self: TContractState, salt:felt252, eph_pkey:felt252, expiration_block: u64) ;
     fn update_oauth_public_key(ref self: TContractState);
     fn get_user_debt(self: @TContractState, user_address:felt252) -> u64;
     fn collect_debt(ref self: TContractState, user_address:felt252);
@@ -22,7 +22,7 @@ pub trait ILogin<TContractState> {
 
 
 #[starknet::contract(account)]
-mod Login {
+pub mod Login {
     use crate::utils::{StructForHashImpl, ConstructorCallDataImpl, PublicInputImpl};
     use crate::utils::{PublicInputs,StructForHash};
     use core::starknet::storage::{StoragePointerReadAccess,
@@ -40,9 +40,10 @@ mod Login {
     use core::starknet::VALIDATED;
     use core::starknet::account::Call;
     use core::starknet::{get_caller_address, get_tx_info, get_block_number, get_contract_address};
-    use core::starknet::TxInfo;
+//    use core::starknet::TxInfo;
     use core::num::traits::Zero;
 
+    const USER_ENDPOINTS : [felt252;2] = [selector!("deploy"), selector!("login")];
     const GARAGA_VERIFY_CLASSHASH: felt252 = 0x640bdf3362f2de1e043bd158fb00297099a35f600edb6acdd56149c4dc0a459;
     const PKEY: felt252 = 0x6363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f;
     const DEPLOY_FEE: u64 = 1_000_000;
@@ -80,19 +81,20 @@ mod Login {
             VALIDATED
         }
 
-        fn __validate__(ref self: ContractState, calls: Span<Call>) -> felt252 {
+        fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             println!("entering __validate__");
             self.only_protocol();
             self.validate_tx_version();
             for call in calls { 
                 let selector = *call.selector;
-                if  (selector != selector!("login")) & (selector != selector!("deploy")) {
+//                if  (selector != selector!("login")) & (selector != selector!("deploy")) {
+                if  !self.is_user_endpoint(selector) {
+                    println!("entering __validate__ for admin");
                     self.validate_tx_signature();
-                    println!("leaving __validate__ without login/deploy validation");
                 } else {
+                    println!("entering __validate__ for users");
                     self.only_self_call(*call);
                     self.validate_login_deploy_call(*call);
-                    println!("leaving __validate__ with login/deploy validation");
                 }
             };
             VALIDATED
@@ -124,19 +126,21 @@ mod Login {
             self.sumo_account_class_hash.read()
         }
 
-        fn login(ref self:ContractState, salt: felt252, eph_pkey:felt252,) {
-            println!("entering: login");
+        fn login(ref self:ContractState, salt: felt252, eph_pkey:felt252, expiration_block: u64) {
+//            println!("entering: login");
             //Aca se tiene que reconstuir la address partiendo del tx_info
             let user_address: ContractAddress = self.precompute_account_address(salt);
             assert(self.user_list.entry(user_address).read() ,'Loggin: not a sumoer' );
-            self.set_user_pkey(user_address, eph_pkey);
+            self.set_user_pkey(user_address, eph_pkey,expiration_block);
             self.add_debt(user_address,LOGIN_FEE);
-            println!("leaving: login");
+//            println!("leaving: login");
         }
 
         fn deploy(ref self: ContractState, salt: felt252) -> ContractAddress {
-            println!("entering: deploy");
+//            println!("entering: deploy");
+            //TODO: get from calldata
             let eph_pkey: felt252 = 12345;
+            let expiration_block:u64 = 20_u64;
             let constructor_arguments = array![1234,1234];
             let class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
             let (address,_) = syscalls::deploy_syscall(class_hash,
@@ -145,7 +149,7 @@ mod Login {
                     core::bool::True
                 ).unwrap_syscall();
             self.user_list.entry(address).write(true);
-            self.set_user_pkey(address, eph_pkey);
+            self.set_user_pkey(address, eph_pkey,expiration_block);
             self.add_debt(address,DEPLOY_FEE);
 
             //This is for testing
@@ -154,7 +158,7 @@ mod Login {
             self.target.append().write(target_address);
             assert(target_address==address,'Addresses dont match');
 
-            println!("leaving: deploy");
+//            println!("leaving: deploy");
             address
         }
 
@@ -171,15 +175,15 @@ mod Login {
         }
 
         fn get_user_debt(self: @ContractState, user_address:felt252) -> u64 {
-            println!("entering: get_user_debt");
+//            println!("entering: get_user_debt");
             let caller: ContractAddress = user_address.try_into().unwrap();
             let debt = self.user_debt.entry(caller).read();
-            println!("leaving: get_user_debt");
+//            println!("leaving: get_user_debt");
             debt
         }
 
         fn collect_debt(ref self: ContractState, user_address:felt252) {
-            println!("entering: collect_debt");
+//            println!("entering: collect_debt");
             let user_address: ContractAddress = OptionTrait::unwrap(user_address.try_into());
             let caller = get_caller_address();
             if (caller != user_address) & (caller != get_contract_address()){
@@ -194,7 +198,7 @@ mod Login {
                array![debt].span()
             ).unwrap_syscall();
             self.user_debt.entry(user_address).write(0);
-            println!("leaving: collect_debt");
+//            println!("leaving: collect_debt");
         }
 
         fn  update_oauth_public_key(ref self: ContractState) {
@@ -209,12 +213,12 @@ mod Login {
     #[generate_trait]
     pub impl PrivateImpl of IPrivate {
         fn add_debt(ref self: ContractState, address: ContractAddress, value: u64) {
-            println!("adding debt");
+//            println!("adding debt");
             let current_debt: u64 = self.user_debt.entry(address).read();
             self.user_debt.entry(address).write(current_debt + value);
         }
 
-        fn precompute_account_address(ref self:ContractState,salt:felt252) -> ContractAddress {
+        fn precompute_account_address(self: @ContractState,salt:felt252) -> ContractAddress {
             let constructor_arguments: Array<felt252> = array![1234,1234];
             let constructor_calldata_hash = ConstructorCallDataImpl::from_array(constructor_arguments).hash();
             let struct_to_hash = StructForHash {
@@ -265,19 +269,13 @@ mod Login {
             res
         }
 
-        fn set_user_pkey(ref self: ContractState, user_address:ContractAddress, eph_pkey: felt252) {
-            let calldata : Array<felt252> = array![eph_pkey];
+        fn set_user_pkey(self: @ContractState, user_address: ContractAddress, eph_pkey: felt252, expiration_block:u64) {
+            let calldata : Array<felt252> = array![eph_pkey, expiration_block.try_into().unwrap()];
                 syscalls::call_contract_syscall(
                    user_address,
                    selector!("change_pkey"),
                    calldata.span()
                 ).unwrap_syscall();
-        }
-
-        fn salt_from_address_seed(ref self: ContractState, address_seed: u256) -> felt252 {
-            let MASK_250: u256 = 1809251394333065553493296640760748560207343510400633813116524750123642650623;
-            let masked_address_seed: felt252 = (address_seed & MASK_250).try_into().unwrap();
-            return masked_address_seed;
         }
 
         fn validate_block_time(
@@ -319,7 +317,7 @@ mod Login {
             assert(target_address == get_contract_address(), 'Not Allowed Outside Call');
         }
 
-        fn validate_login_deploy_call(ref self: ContractState, call:Call) {
+        fn validate_login_deploy_call(self: @ContractState, call:Call) {
             let public_inputs = PublicInputs{
                 eph_public_key0: 1234,
                 eph_public_key1: 1234,
@@ -349,7 +347,32 @@ mod Login {
                 assert(debt == 0, 'User has a debt');
             }
         }
-    }
 
+        fn is_user_endpoint(self:@ContractState, selector: felt252) -> bool {
+            let mut is_contained: bool = false;
+            for entry_point in USER_ENDPOINTS.span() {
+                if selector == *entry_point {
+                    is_contained = true;
+                }
+            };
+            return is_contained;
+        }
+
+    }
 }
 
+#[cfg(test)]
+mod test {
+    const ASD : [felt252;4] = [selector!("asd"), selector!("asd1") , selector!("asd2"), selector!("asd3")];
+
+//    #[test]
+    fn test() {
+        let  mut contains: bool = false;
+        for element in ASD.span() {
+            if *element == selector!("asd4") {
+                contains = true ;
+            }
+        };
+        assert(contains, 'is not contained');
+    }
+}
