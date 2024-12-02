@@ -37,12 +37,12 @@ pub mod Account {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, arg1:felt252, arg2:felt252) -> ContractAddress {
+    fn constructor(ref self: ContractState) -> ContractAddress {
 //        println!("entering: constructor");
         //Might be the universal deployer address if deploy is made with a DEPLOY_ACCOUNT transaction
         //If the deploy is made with an INVOKE transaction the caller addres is the sumo_Login address.
         //Si se cambian la cantidad de argumentos del constructor recordar que el hash finaliza con hash(cantidad),
-        //andar a cambiarlo
+        //ir a cambiarlo
         let deployer_address = get_caller_address();
         self.deployer_address.write(deployer_address);
         //Esto va a cambiar

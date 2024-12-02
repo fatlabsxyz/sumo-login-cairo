@@ -23,7 +23,7 @@ pub trait ILogin<TContractState> {
 
 #[starknet::contract(account)]
 pub mod Login {
-    use crate::utils::{StructForHashImpl, ConstructorCallDataImpl, PublicInputImpl};
+    use crate::utils::{StructForHashImpl, PublicInputImpl};
     use crate::utils::{PublicInputs,StructForHash};
     use core::starknet::storage::{StoragePointerReadAccess,
         StoragePointerWriteAccess,
@@ -141,12 +141,13 @@ pub mod Login {
             //TODO: get from calldata
             let eph_pkey: felt252 = 12345;
             let expiration_block:u64 = 20_u64;
-            let constructor_arguments = array![1234,1234];
+//            let constructor_arguments = array![1234,1234];
+            let constructor_arguments = array![];
             let class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
             let (address,_) = syscalls::deploy_syscall(class_hash,
                     salt,
                     constructor_arguments.span(),
-                    core::bool::True
+                    core::bool::False
                 ).unwrap_syscall();
             self.user_list.entry(address).write(true);
             self.set_user_pkey(address, eph_pkey,expiration_block);
@@ -219,14 +220,16 @@ pub mod Login {
         }
 
         fn precompute_account_address(self: @ContractState,salt:felt252) -> ContractAddress {
-            let constructor_arguments: Array<felt252> = array![1234,1234];
-            let constructor_calldata_hash = ConstructorCallDataImpl::from_array(constructor_arguments).hash();
+//            let constructor_arguments: Array<felt252> = array![1234,1234];
+//            let _constructor_calldata_hash = ConstructorCallDataImpl::from_array(constructor_arguments).hash();
+            let hash_zero_array: felt252 = 2089986280348253421170679821480865132823066470938446095505822317253594081284;
             let struct_to_hash = StructForHash {
                 prefix: 'STARKNET_CONTRACT_ADDRESS',
-                deployer_address: 0,
+                deployer_address: get_contract_address().try_into().unwrap(),
                 salt: salt,
                 class_hash: self.sumo_account_class_hash.read(),
-                constructor_calldata_hash: constructor_calldata_hash,
+//                constructor_calldata_hash: constructor_calldata_hash,
+                constructor_calldata_hash: hash_zero_array,
             };
             let hash = struct_to_hash.hash();
             hash.try_into().unwrap()
