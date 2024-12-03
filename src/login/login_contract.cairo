@@ -23,8 +23,9 @@ pub trait ILogin<TContractState> {
 
 #[starknet::contract(account)]
 pub mod Login {
-    use crate::utils::{StructForHashImpl, PublicInputImpl};
-    use crate::utils::{PublicInputs,StructForHash};
+    use crate::utils::structs::{StructForHashImpl, PublicInputImpl};
+    use crate::utils::structs::{PublicInputs,StructForHash};
+    use crate::utils::execute::execute_calls;
     use core::starknet::storage::{StoragePointerReadAccess,
         StoragePointerWriteAccess,
         StoragePathEntry,
@@ -87,7 +88,6 @@ pub mod Login {
             self.validate_tx_version();
             for call in calls { 
                 let selector = *call.selector;
-//                if  (selector != selector!("login")) & (selector != selector!("deploy")) {
                 if  !self.is_user_endpoint(selector) {
                     println!("entering __validate__ for admin");
                     self.validate_tx_signature();
@@ -104,7 +104,7 @@ pub mod Login {
             println!("entering __execute__");
             self.only_protocol();
             self.validate_tx_version();
-            self.execute_calls(calls)
+            execute_calls(calls)
         }
         
         fn get_deployed(self: @ContractState) -> Array<ContractAddress> {
@@ -141,12 +141,10 @@ pub mod Login {
             //TODO: get from calldata
             let eph_pkey: felt252 = 12345;
             let expiration_block:u64 = 20_u64;
-//            let constructor_arguments = array![1234,1234];
-            let constructor_arguments = array![];
             let class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
             let (address,_) = syscalls::deploy_syscall(class_hash,
                     salt,
-                    constructor_arguments.span(),
+                    array![].span(),
                     core::bool::False
                 ).unwrap_syscall();
             self.user_list.entry(address).write(true);
@@ -220,15 +218,12 @@ pub mod Login {
         }
 
         fn precompute_account_address(self: @ContractState,salt:felt252) -> ContractAddress {
-//            let constructor_arguments: Array<felt252> = array![1234,1234];
-//            let _constructor_calldata_hash = ConstructorCallDataImpl::from_array(constructor_arguments).hash();
             let hash_zero_array: felt252 = 2089986280348253421170679821480865132823066470938446095505822317253594081284;
             let struct_to_hash = StructForHash {
                 prefix: 'STARKNET_CONTRACT_ADDRESS',
                 deployer_address: get_contract_address().try_into().unwrap(),
                 salt: salt,
                 class_hash: self.sumo_account_class_hash.read(),
-//                constructor_calldata_hash: constructor_calldata_hash,
                 constructor_calldata_hash: hash_zero_array,
             };
             let hash = struct_to_hash.hash();
@@ -253,24 +248,6 @@ pub mod Login {
             assert(self.is_valid_signature(tx_hash,signature.into())==VALIDATED, 'Wrong: Signature');
         }
 
-        fn execute_call(ref self: ContractState, call: @Call) -> Span<felt252> {
-            let Call { to, selector, calldata } = *call;
-            starknet::syscalls::call_contract_syscall(to, selector, calldata).unwrap_syscall()
-        }
-
-        fn execute_calls(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
-            let mut res = array![];
-            loop {
-                match calls.pop_front() {
-                    Option::Some(call) => {
-                        let _res = self.execute_call(call);
-                        res.append(_res);
-                    },
-                    Option::None => { break (); },
-                };
-            };
-            res
-        }
 
         fn set_user_pkey(self: @ContractState, user_address: ContractAddress, eph_pkey: felt252, expiration_block:u64) {
             let calldata : Array<felt252> = array![eph_pkey, expiration_block.try_into().unwrap()];

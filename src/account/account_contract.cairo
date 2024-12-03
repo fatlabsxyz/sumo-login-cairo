@@ -28,6 +28,7 @@ pub mod Account {
     use core::starknet::{get_caller_address, get_tx_info, VALIDATED, get_contract_address, get_block_number};
     use core::num::traits::Zero;
     use starknet::account::Call;
+    use crate::utils::execute::execute_calls;
 
     #[storage]
     struct Storage {
@@ -98,7 +99,7 @@ pub mod Account {
             self.only_protocol();
             self.validate_tx_version();
             self.pay_debt();
-            self.execute_calls(calls)
+            execute_calls(calls)
         }
 
         fn get_my_debt(self: @ContractState) -> u64 {
@@ -146,24 +147,6 @@ pub mod Account {
             assert(tx_version >= 1_u256, 'Fail: Tx_version mismatch');
         }
 
-        fn execute_call(ref self: ContractState, call: @Call) -> Span<felt252> {
-            let Call { to, selector, calldata } = *call;
-            starknet::syscalls::call_contract_syscall(to, selector, calldata).unwrap_syscall()
-        }
-
-        fn execute_calls(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
-            let mut res = array![];
-            loop {
-                match calls.pop_front() {
-                    Option::Some(call) => {
-                        let _res = self.execute_call(call);
-                        res.append(_res);
-                    },
-                    Option::None => { break (); },
-                };
-            };
-            res
-        }
 
         fn validate_tx_signature(self: @ContractState){
             let tx_info = get_tx_info().unbox();
