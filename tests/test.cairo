@@ -1,55 +1,14 @@
-use sumo::account::account_contract::ExternalTraitDispatcher;
+use crate::setup::{setup_login,deploy_with_salt};
+use sumo::login::login_contract::ILoginDispatcherTrait;
 use sumo::account::account_contract::ExternalTraitDispatcherTrait;
 
-use sumo::login::login_contract::ILoginDispatcher;
-use sumo::login::login_contract::ILoginDispatcherTrait;
-use core::starknet::{ContractAddress};
-
-
-use snforge_std::{
-    declare,
-    ContractClassTrait,
-    DeclareResultTrait,
-    ContractClass,
-};
-
-use snforge_std::{start_cheat_caller_address};
-//use snforge_std::{mock_call,start_cheat_block_number};
+use snforge_std::start_cheat_caller_address;
 
 const DEPLOY_FEE: u64 = 1_000_000;
 const LOGIN_FEE: u64 = 1_000_000;
-const LOGIN_ADDRESS: felt252 = 0x75662cc8b986d55d709d58f698bbb47090e2474918343b010192f487e30c23f;
-
-pub fn declare_class(contract_name: ByteArray) -> (ContractClass, felt252) {
-    let contract = declare(contract_name.clone()).unwrap().contract_class();
-    let class_hash: felt252 = (*contract.class_hash).into();
-    println!("{} class_hash {:?}", contract_name, class_hash);
-    (*contract, class_hash)
-}
-
-pub fn deploy(contract_class: ContractClass, address: felt252, calldata: Array<felt252>) -> ContractAddress {
-    let (deployed_address, _) = contract_class
-        .deploy_at(@calldata, address.try_into().unwrap())
-        .expect('Couldnt deploy');
-    deployed_address
-}
-
-fn deploy_with_salt(login_dispatcher: ILoginDispatcher, salt:felt252 ) -> (ContractAddress, ExternalTraitDispatcher ){
-    let account_address = login_dispatcher.deploy(salt);
-    let account_dispatcher = ExternalTraitDispatcher { contract_address: account_address};
-    (account_address, account_dispatcher)
-}
-
-fn setup_login() -> (ContractAddress,ILoginDispatcher) {
-    let (_account_contract, account_class_hash) = declare_class("Account");
-    let (login_contract, _login_class_hash) = declare_class("Login");
-    let login_address= deploy(login_contract, LOGIN_ADDRESS.try_into().unwrap(),array![account_class_hash]);
-    let login_dispatcher = ILoginDispatcher {contract_address: login_address};
-    (login_address,login_dispatcher)
-}
 
 #[test]
-fn test_precopute_addresses() {
+fn precopute_addresses() {
     let accounts_to_deploy:u64 = 10_u64;
     let (_login_address, login_dispatcher) = setup_login();
     let mut salt:felt252 = 1234;
@@ -64,7 +23,7 @@ fn test_precopute_addresses() {
 }
 
 #[test]
-fn test_debt_asignation() {
+fn debt_asignation_on_deploy() {
     let (_login_address, login_dispatcher) = setup_login();
     let (account_address, account_dispatcher) = deploy_with_salt(login_dispatcher, 12345);
     let debt = login_dispatcher.get_user_debt(account_address.try_into().unwrap());
@@ -74,7 +33,7 @@ fn test_debt_asignation() {
 }
 
 #[test]
-fn test_user_knows_deployer() {
+fn user_knows_deployer() {
     let (login_address, login_dispatcher) = setup_login();
     let (_account_address, account_dispatcher) = deploy_with_salt(login_dispatcher, 12345);
     let deployer = account_dispatcher.get_deployer_address();
@@ -82,7 +41,7 @@ fn test_user_knows_deployer() {
 }
 
 #[test]
-fn test_user_change_pkey() {
+fn user_change_pkey() {
     //The user itself decides to change de key or extend the expiration
     let (_login_address, login_dispatcher) = setup_login();
     let (account_address, account_dispatcher) = deploy_with_salt(login_dispatcher, 12345);
