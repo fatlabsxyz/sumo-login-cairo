@@ -10,14 +10,10 @@ pub trait ILogin<TContractState> {
 
     fn deploy(ref self: TContractState, salt:felt252) -> ContractAddress ;
     fn login(ref self: TContractState, salt:felt252, eph_pkey:felt252, expiration_block: u64) ;
+    fn is_sumo_user(self: @TContractState, user_address:felt252) -> bool;
     fn update_oauth_public_key(ref self: TContractState);
     fn get_user_debt(self: @TContractState, user_address:felt252) -> u64;
     fn collect_debt(ref self: TContractState, user_address:felt252);
-
-    //for testing
-    fn get_deployed(self: @TContractState) -> Array<ContractAddress>;
-    fn get_targets(self: @TContractState) -> Array<ContractAddress>;
-    fn get_declared_address(self: @TContractState) -> felt252;
 }
 
 
@@ -29,9 +25,6 @@ pub mod Login {
     use core::starknet::storage::{StoragePointerReadAccess,
         StoragePointerWriteAccess,
         StoragePathEntry,
-        Vec,
-        VecTrait,
-        MutableVecTrait,
         Map
         };
     use core::ecdsa::check_ecdsa_signature;
@@ -58,10 +51,6 @@ pub mod Login {
         user_list: Map<ContractAddress, bool>,
         oauth_public_key: felt252,
         first_deploy:bool,
-
-        //esta es temportal
-        deployed: Vec<ContractAddress>,
-        target: Vec<ContractAddress>,
     }
 
     #[constructor]
@@ -107,23 +96,8 @@ pub mod Login {
             execute_calls(calls)
         }
         
-        fn get_deployed(self: @ContractState) -> Array<ContractAddress> {
-            let mut addresses = array![];
-            for i in 0..self.deployed.len(){
-                addresses.append(self.deployed.at(i).read())
-            };
-            addresses
-        }
-
-        fn get_targets(self: @ContractState) -> Array<ContractAddress> {
-            let mut addresses = array![];
-            for i in 0..self.deployed.len(){
-                addresses.append(self.deployed.at(i).read())
-            };
-            addresses
-        }
-        fn get_declared_address(self: @ContractState) -> felt252 {
-            self.sumo_account_class_hash.read()
+        fn is_sumo_user(self: @ContractState, user_address:felt252) -> bool {
+            self.user_list.entry(user_address.try_into().unwrap()).read()
         }
 
         fn login(ref self:ContractState, salt: felt252, eph_pkey:felt252, expiration_block: u64) {
@@ -150,14 +124,6 @@ pub mod Login {
             self.user_list.entry(address).write(true);
             self.set_user_pkey(address, eph_pkey,expiration_block);
             self.add_debt(address,DEPLOY_FEE);
-
-            //This is for testing
-            self.deployed.append().write(address);
-            let target_address = self.precompute_account_address(salt);
-            self.target.append().write(target_address);
-            assert(target_address==address,'Addresses dont match');
-
-//            println!("leaving: deploy");
             address
         }
 

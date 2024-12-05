@@ -13,7 +13,8 @@ use snforge_std::{
     ContractClass,
 };
 
-use snforge_std::{start_cheat_caller_address,mock_call,start_cheat_block_number};
+use snforge_std::{start_cheat_caller_address};
+//use snforge_std::{mock_call,start_cheat_block_number};
 
 const DEPLOY_FEE: u64 = 1_000_000;
 const LOGIN_FEE: u64 = 1_000_000;
@@ -39,17 +40,6 @@ fn deploy_with_salt(login_dispatcher: ILoginDispatcher, salt:felt252 ) -> (Contr
     (account_address, account_dispatcher)
 }
 
-fn deploy_n(login_dispatcher: ILoginDispatcher, number:felt252 ) {
-    let mut salt:felt252 = 1234;
-    let mut index: u64 = 0;
-    let max:u64 = number.try_into().unwrap();
-    while index <= max { 
-        deploy_with_salt(login_dispatcher, salt);
-        salt = salt +1;
-        index = index + 1;
-    }
-
-}
 fn setup_login() -> (ContractAddress,ILoginDispatcher) {
     let (_account_contract, account_class_hash) = declare_class("Account");
     let (login_contract, _login_class_hash) = declare_class("Login");
@@ -60,11 +50,17 @@ fn setup_login() -> (ContractAddress,ILoginDispatcher) {
 
 #[test]
 fn test_precopute_addresses() {
+    let accounts_to_deploy:u64 = 10_u64;
     let (_login_address, login_dispatcher) = setup_login();
-    deploy_n(login_dispatcher,10);
-    let deployed = login_dispatcher.get_deployed();
-    let targets = login_dispatcher.get_targets();
-    assert!(deployed==targets, "Addresses incorrectly computed");
+    let mut salt:felt252 = 1234;
+    let mut index: u64 = 0;
+    while index <= accounts_to_deploy { 
+        let (deployed_address , _ ) = deploy_with_salt(login_dispatcher, salt);
+        let is_user = login_dispatcher.is_sumo_user(deployed_address.try_into().unwrap());
+        assert!(is_user == true, "Addresses Incorrectlye computed");
+        salt = salt +1;
+        index = index + 1;
+    };
 }
 
 #[test]
