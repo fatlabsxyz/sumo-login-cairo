@@ -6,6 +6,7 @@ pub trait ILogin<TContractState> {
     fn is_valid_signature(self: @TContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252;
     fn __validate__(self: @TContractState, calls: Span<Call>) -> felt252 ;
     fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
+    fn __validate_declare__(ref self: TContractState, declared_class_hash: felt252) -> felt252;
 
     fn deploy(ref self: TContractState, salt:felt252) -> ContractAddress ;
     fn login(ref self: TContractState, salt:felt252, eph_pkey:felt252, expiration_block: u64) ;
@@ -13,6 +14,8 @@ pub trait ILogin<TContractState> {
     fn update_oauth_public_key(ref self: TContractState);
     fn get_user_debt(self: @TContractState, user_address:felt252) -> u64;
     fn collect_debt(ref self: TContractState, user_address:felt252);
+
+    fn test(ref self: TContractState, data: u256);
 }
 
 
@@ -51,6 +54,21 @@ pub mod Login {
         oauth_public_key: felt252,
     }
 
+    #[derive(Serde, Drop, Debug)]
+    struct Signature {
+        signature_type: felt252,
+        eph_key: felt252,
+        r: felt252,
+        s: felt252,
+        address_seed: u256,
+        max_block: felt252,
+        iss_b64_F: u256,
+        iss_index_in_payload_mod_4: felt252,
+        header_F: u256,
+        modulus_F: u256,
+        garaga: Span<felt252>
+    }
+
     #[constructor]
     fn constructor(ref self: ContractState, sumo_account_class_hash: felt252) {
         self.sumo_account_class_hash.write(sumo_account_class_hash)
@@ -58,21 +76,47 @@ pub mod Login {
 
     #[abi(embed_v0)]
     impl LoginImpl of super::ILogin<ContractState> {
+        fn test(ref self: ContractState ,data: u256){
+            println!("{:?}",data);
+        }
+
+        fn __validate_declare__(ref self: ContractState, declared_class_hash: felt252) -> felt252 {
+            println!("entering __validate_declare__");
+            self.sumo_account_class_hash.write(declared_class_hash);
+            println!("leaving: __validate_declare__");
+            VALIDATED
+        }
 
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             println!("entering __validate__");
             self.only_protocol();
             self.validate_tx_version();
-            for call in calls { 
-                let selector = *call.selector;
-                if self.is_user_endpoint(selector) {
-                    println!("entering __validate__ for users");
-                    self.only_self_call(*call);
-                    self.validate_login_deploy_call(*call);
-                } else {
-                    println!("entering __validate__ for admin");
-                    self.validate_tx_signature();
+
+            let tx = get_tx_info().unbox();
+            let mut signer = tx.signature;
+            let signature: Signature = Serde::<Signature>::deserialize(ref signer).unwrap();
+            println!("Selector User Signature:{:?}",selector!("User Signature"));
+            println!("Selector Admin Signature:{:?}",selector!("Admin Signature"));
+            println!("Signature:{:?}",signature);
+        
+
+            if signature.signature_type == selector!("User Signature") {
+                println!("entering __validate__ for Users");
+                assert!(calls.len() == 1, "User Multicals Not Allowed");
+                let call = calls[0];
+                self.only_self_call(*call);
+                assert!(self.is_user_entrypoint(*call.selector),"Not Allowed");
+                self.validate_tx_user_signature(signature.eph_key, signature.r,signature.s);
+                self.validate_login_deploy_call(*call);
+
+            } else if signature.signature_type == selector!("Admin Signature") {
+                println!("entering __validate__ for Admin");
+                self.validate_tx_admin_signature(signature.r, signature.s);
+                for call in calls {
+                    assert!(!self.is_user_entrypoint(*call.selector),"Not Allowed")
                 }
+            } else {
+                assert!(false, "Signature Type Not Recognised");
             };
             VALIDATED
         }
@@ -193,11 +237,21 @@ pub mod Login {
             assert(tx_version >= 1_u256, 'Fail: Tx_version mismatch');
         }
 
-        fn validate_tx_signature(self: @ContractState){
+        fn validate_tx_user_signature(self: @ContractState, eph_key:felt252, r:felt252, s:felt252){
             let tx_info = get_tx_info().unbox();
-            let signature = tx_info.signature;
             let tx_hash = tx_info.transaction_hash;
-            assert(self.is_valid_signature(tx_hash,signature.into()) == VALIDATED, 'Wrong: Signature');
+            if !check_ecdsa_signature(tx_hash, eph_key, r, s) {
+                assert(false,'Wrong Signature')
+            }
+        }
+
+
+        fn validate_tx_admin_signature(self: @ContractState, r:felt252, s:felt252){
+            let tx_info = get_tx_info().unbox();
+//            let signature = tx_info.signature;
+            let tx_hash = tx_info.transaction_hash;
+            let rs:Array<felt252> = array![r,s];
+            assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, 'Wrong: Signature');
         }
 
 
@@ -280,7 +334,7 @@ pub mod Login {
             }
         }
 
-        fn is_user_endpoint(self:@ContractState, selector: felt252) -> bool {
+        fn is_user_entrypoint(self:@ContractState, selector: felt252) -> bool {
             let mut is_contained: bool = false;
             for entry_point in USER_ENDPOINTS.span() {
                 if selector == *entry_point {
