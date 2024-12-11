@@ -4,9 +4,8 @@ use core::starknet::account::Call;
 #[starknet::interface]
 pub trait ILogin<TContractState> {
     fn is_valid_signature(self: @TContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252;
-    fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
     fn __validate__(self: @TContractState, calls: Span<Call>) -> felt252 ;
-    fn __validate_declare__(ref self: TContractState, declared_class_hash:felt252) -> felt252;
+    fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
 
     fn deploy(ref self: TContractState, salt:felt252) -> ContractAddress ;
     fn login(ref self: TContractState, salt:felt252, eph_pkey:felt252, expiration_block: u64) ;
@@ -50,7 +49,6 @@ pub mod Login {
         user_debt: Map<ContractAddress, u64>,
         user_list: Map<ContractAddress, bool>,
         oauth_public_key: felt252,
-        first_deploy:bool,
     }
 
     #[constructor]
@@ -60,16 +58,6 @@ pub mod Login {
 
     #[abi(embed_v0)]
     impl LoginImpl of super::ILogin<ContractState> {
-        fn __validate_declare__(ref self: ContractState, declared_class_hash: felt252) -> felt252 {
-            self.only_protocol();
-            self.validate_tx_signature();
-            println!("entering __validate_declare__");
-            assert(!self.first_deploy.read(), 'Only one deploy allowed');
-            self.sumo_account_class_hash.write(declared_class_hash);
-            self.first_deploy.write(true);
-            println!("leaving: __validate_declare__");
-            VALIDATED
-        }
 
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             println!("entering __validate__");
@@ -77,13 +65,13 @@ pub mod Login {
             self.validate_tx_version();
             for call in calls { 
                 let selector = *call.selector;
-                if  !self.is_user_endpoint(selector) {
-                    println!("entering __validate__ for admin");
-                    self.validate_tx_signature();
-                } else {
+                if self.is_user_endpoint(selector) {
                     println!("entering __validate__ for users");
                     self.only_self_call(*call);
                     self.validate_login_deploy_call(*call);
+                } else {
+                    println!("entering __validate__ for admin");
+                    self.validate_tx_signature();
                 }
             };
             VALIDATED
@@ -147,20 +135,18 @@ pub mod Login {
             debt
         }
 
-        fn collect_debt(ref self: ContractState, user_address:felt252) {
-//            println!("entering: collect_debt");
+        fn collect_debt(ref self: ContractState, user_address: felt252) {
             let user_address: ContractAddress = OptionTrait::unwrap(user_address.try_into());
             let caller = get_caller_address();
             if (caller != user_address) & (caller != get_contract_address()){
-                assert(false,'you are not allowed');
+                assert(false, 'you are not allowed');
             }
             let debt = self.user_debt.entry(user_address).read();
             if debt <= 0 { assert(false,'user has no debt') }
-            let debt:felt252 = debt.try_into().unwrap();
             syscalls::call_contract_syscall(
                user_address,
                selector!("cancel_debt"),
-               array![debt].span()
+               array![debt.try_into().unwrap()].span()
             ).unwrap_syscall();
             self.user_debt.entry(user_address).write(0);
 //            println!("leaving: collect_debt");
@@ -211,7 +197,7 @@ pub mod Login {
             let tx_info = get_tx_info().unbox();
             let signature = tx_info.signature;
             let tx_hash = tx_info.transaction_hash;
-            assert(self.is_valid_signature(tx_hash,signature.into())==VALIDATED, 'Wrong: Signature');
+            assert(self.is_valid_signature(tx_hash,signature.into()) == VALIDATED, 'Wrong: Signature');
         }
 
 
