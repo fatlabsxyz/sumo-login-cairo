@@ -25,4 +25,12 @@ version = "0.1.0"
 dependencies = [
  "garaga",
  "snforge_std",
+ "universal_ecip",
+]
+
+[[package]]
+name = "universal_ecip"
+version = "0.1.0"
+dependencies = [
+ "garaga",
 ]

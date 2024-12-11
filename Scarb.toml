@@ -9,6 +9,7 @@ test = "snforge test"
 
 [dependencies]
 garaga = { git = "https://github.com/keep-starknet-strange/garaga.git",tag="v0.13.3"}
+universal_ecip = { path = "./universal_ecip" }
 starknet = "2.8.2"
 
 [dev-dependencies]
@@ -20,6 +21,7 @@ assert_macros = "2.8.4"
 sierra-replace-ids = false
 
 [[target.starknet-contract]]
+build-external-contracts = ["universal_ecip::UniversalECIP"]
 # casm = true
 # casm-add-pythonic-hints = true
 

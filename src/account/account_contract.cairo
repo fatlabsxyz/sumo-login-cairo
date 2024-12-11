@@ -10,7 +10,7 @@ pub trait ExternalTrait<TContractState> {
 
     //SUMO interface
     fn change_pkey(ref self: TContractState, new_key: felt252, expiration_block:felt252);
-    fn get_my_debt(self: @TContractState) -> u64;
+    fn get_my_debt(self: @TContractState) -> u128;
     fn cancel_debt(self: @TContractState, amount: u256);
 
     //for testing
@@ -84,14 +84,14 @@ pub mod Account {
             }
         }
 
-        fn get_my_debt(self: @ContractState) -> u64 {
+        fn get_my_debt(self: @ContractState) -> u128 {
             let to = self.deployer_address.read();
             let res = syscalls::call_contract_syscall(
                to,
                selector!("get_user_debt"),
                array![get_contract_address().into()].span()
             ).unwrap_syscall();
-            let debt: u64 = (*res.at(0)).try_into().unwrap();
+            let debt: u128 = (*res.at(0)).try_into().unwrap();
             debt
         }
 
@@ -153,13 +153,18 @@ pub mod Account {
 
 
         fn pay_debt(self: @ContractState) {
-            let debt = self.get_my_debt();
+            let debt : u256 = self.get_my_debt().into();
             if debt > 0 {
                 //TODO: checkear que tengas plata antes
+                let calldata: Array<felt252> = array![
+                    self.deployer_address.read().into(),
+                    debt.low.into(),
+                    debt.high.into(),
+                ];
                 syscalls::call_contract_syscall(
-                    self.deployer_address.read(),
-                    selector!("collect_debt"),
-                    array![get_contract_address().into()].span()
+                   ETH_ADDRRESS.try_into().unwrap(),
+                   selector!("transfer"),
+                   calldata.span()
                 ).unwrap_syscall();
             }
         }
