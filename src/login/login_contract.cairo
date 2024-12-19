@@ -10,17 +10,16 @@ pub trait ILogin<TContractState> {
 
     fn deploy(ref self: TContractState) -> ContractAddress ;
     fn login(ref self: TContractState) ;
-    fn is_sumo_user(self: @TContractState, user_address:felt252) -> bool;
+    fn is_sumo_user(self: @TContractState, user_address: ContractAddress) -> bool;
     fn update_oauth_public_key(ref self: TContractState);
-    fn get_user_debt(self: @TContractState, user_address:felt252) -> u128;
-    fn collect_debt(ref self: TContractState, user_address:felt252);
+    fn get_user_debt(self: @TContractState, user_address: ContractAddress) -> u128;
+    fn collect_debt(ref self: TContractState, user_address: ContractAddress);
 }
 
 #[starknet::contract(account)]
 pub mod Login {
-    use core::sha256::compute_sha256_byte_array;
     use crate::utils::structs::{StructForHashImpl, PublicInputImpl};
-    use crate::utils::structs::{StructForHash};
+    use crate::utils::structs::{Signature};
     use crate::utils::execute::execute_calls;
     use core::starknet::storage::{StoragePointerReadAccess,
         StoragePointerWriteAccess,
@@ -36,6 +35,8 @@ pub mod Login {
     use core::starknet::{get_caller_address, get_tx_info, get_block_number, get_contract_address};
 //    use core::starknet::TxInfo;
     use core::num::traits::Zero;
+    use crate::utils::errors::LoginErrors;
+    use crate::utils::utils::{validate_all_inputs_hash, mask_address_seed, precompute_account_address};
 
     const USER_ENDPOINTS : [felt252;2] = [selector!("deploy"), selector!("login")];
     const TWO_POWER_128: felt252 = 340282366920938463463374607431768211456;
@@ -55,20 +56,6 @@ pub mod Login {
         oauth_modulus_F: u256,
     }
 
-    #[derive(Serde, Drop, Debug)]
-    struct Signature {
-        signature_type: felt252,
-        r: felt252,
-        s: felt252,
-        eph_key: (felt252, felt252),
-        address_seed: u256,
-        max_block: felt252,
-        iss_b64_F: u256,
-        iss_index_in_payload_mod_4: felt252,
-        header_F: u256,
-        modulus_F: u256,
-        garaga: Span<felt252>
-    }
 
     #[constructor]
     fn constructor(ref self: ContractState, sumo_account_class_hash: felt252) {
@@ -78,39 +65,32 @@ pub mod Login {
 
     #[abi(embed_v0)]
     impl LoginImpl of super::ILogin<ContractState> {
-
         fn __validate_declare__(ref self: ContractState, declared_class_hash: felt252) -> felt252 {
-//            println!("entering __validate_declare__");
             self.sumo_account_class_hash.write(declared_class_hash);
-//            println!("leaving: __validate_declare__");
             VALIDATED
         }
 
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             self.only_protocol();
             self.validate_tx_version();
-
             let signature = self.get_serialized_signature();
-//            println!("Selector User Signature:{:?}",selector!("User Signature"));
-//            println!("Selector Admin Signature:{:?}",selector!("Admin Signature"));
 
-            if signature.signature_type == selector!("User Signature") {
-//                println!("entering __validate__ for Users");
-                assert!(calls.len() == 1, "User Multicals Not Allowed");
+            if signature.signature_type == selector!("signature/user") {
+                assert(calls.len() == 1, LoginErrors::MULTICALLS);
                 let call = calls[0];
                 self.only_self_call(*call);
-                assert!(self.is_user_entrypoint(*call.selector),"Not Allowed");
-                self.validate_tx_user_signature(signature.eph_key, signature.r,signature.s);
+                assert(self.is_user_entrypoint(*call.selector) , LoginErrors::SELECTOR_NOT_ALLOWED);
+                self.validate_tx_user_signature(signature.eph_key, signature.r, signature.s);
                 self.validate_login_deploy_call(*call);
 
-            } else if signature.signature_type == selector!("Admin Signature") {
-//                println!("entering __validate__ for Admin");
+            } else if signature.signature_type == selector!("signature/admin") {
                 self.validate_tx_admin_signature(signature.r, signature.s);
                 for call in calls {
-                    assert!(!self.is_user_entrypoint(*call.selector),"Not Allowed")
+                    //admin cannot call login/deploy selector with his key
+                    assert(!self.is_user_entrypoint(*call.selector), LoginErrors::SELECTOR_NOT_ALLOWED)
                 }
             } else {
-                assert!(false, "Signature Type Not Recognised");
+                assert(false, LoginErrors::INVALID_SIGNATURE_TYPE);
             };
             VALIDATED
         }
@@ -122,20 +102,17 @@ pub mod Login {
             execute_calls(calls)
         }
         
-        fn is_sumo_user(self: @ContractState, user_address:felt252) -> bool {
-            self.user_list.entry(user_address.try_into().unwrap()).read()
+        fn is_sumo_user(self: @ContractState, user_address: ContractAddress) -> bool {
+            self.user_list.entry(user_address).read()
         }
 
         fn login(ref self:ContractState) {
             let signature = self.get_serialized_signature();
-            let address_seed_masked = self.mask_address_seed(signature.address_seed);
             let (eph_key_0,eph_key_1) = signature.eph_key;
             let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
             let expiration_block:u64 = signature.max_block.try_into().unwrap();
 
-            let user_address: ContractAddress = self.precompute_account_address(address_seed_masked);
-
-            assert(self.user_list.entry(user_address).read() ,'Loggin: not a sumoer' );
+            let user_address: ContractAddress = self.get_target_address(signature.address_seed);
 
             self.set_user_pkey(user_address, reconstructed_eph_key, expiration_block);
             self.add_debt(user_address,LOGIN_FEE);
@@ -144,19 +121,20 @@ pub mod Login {
         fn deploy(ref self: ContractState) -> ContractAddress {
 //            println!("Entering deploy");
             let signature = self.get_serialized_signature();
-            let address_seed_masked = self.mask_address_seed(signature.address_seed);
-            let (eph_key_0,eph_key_1) = signature.eph_key;
-            let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
-            let expiration_block:u64 = signature.max_block.try_into().unwrap();
+            let address_seed_masked = mask_address_seed(signature.address_seed);
             let class_hash : ClassHash = self.sumo_account_class_hash.read().try_into().unwrap();
             let (address,_) = syscalls::deploy_syscall(class_hash,
                     address_seed_masked,
                     array![].span(),
                     core::bool::False
                 ).unwrap_syscall();
-            let precomputed_address = self.precompute_account_address(address_seed_masked);
+            let precomputed_address = self.get_target_address(signature.address_seed);
             assert!(precomputed_address == address, "Precomputed Address does not match");
             self.user_list.entry(address).write(true);
+
+            let (eph_key_0,eph_key_1) = signature.eph_key;
+            let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
+            let expiration_block:u64 = signature.max_block.try_into().unwrap();
             self.set_user_pkey(address, reconstructed_eph_key ,expiration_block);
             self.add_debt(address,DEPLOY_FEE);
             println!("Deployed address {:?}", address);
@@ -175,29 +153,26 @@ pub mod Login {
             }
         }
 
-        fn get_user_debt(self: @ContractState, user_address:felt252) -> u128 {
-//            println!("entering: get_user_debt");
-            let caller: ContractAddress = user_address.try_into().unwrap();
-            let debt = self.user_debt.entry(caller).read();
-//            println!("leaving: get_user_debt");
-            debt
+        fn get_user_debt(self: @ContractState, user_address:ContractAddress) -> u128 {
+            self.user_debt.entry(user_address).read()
         }
 
-        fn collect_debt(ref self: ContractState, user_address: felt252) {
-            let user_address: ContractAddress = OptionTrait::unwrap(user_address.try_into());
-            let caller = get_caller_address();
-            if (caller != user_address) & (caller != get_contract_address()){
-                assert(false, 'you are not allowed');
-            }
+        fn collect_debt(ref self: ContractState, user_address:  ContractAddress) {
+            if get_caller_address() != get_contract_address() {
+                assert(false, LoginErrors::SELECTOR_NOT_ALLOWED);
+            } 
+            
             let debt = self.user_debt.entry(user_address).read();
-            if debt <= 0 { assert(false,'user has no debt') }
+            if debt <= 0 {
+                assert(false, LoginErrors::HAS_NOT_DEBT) 
+            }
+
             syscalls::call_contract_syscall(
                user_address,
                selector!("cancel_debt"),
                array![debt.try_into().unwrap()].span()
             ).unwrap_syscall();
             self.user_debt.entry(user_address).write(0);
-//            println!("leaving: collect_debt");
         }
 
         fn  update_oauth_public_key(ref self: ContractState) {
@@ -217,29 +192,16 @@ pub mod Login {
             self.user_debt.entry(address).write(current_debt + value);
         }
 
-        fn precompute_account_address(self: @ContractState , salt:felt252) -> ContractAddress {
-            let hash_zero_array: felt252 = 2089986280348253421170679821480865132823066470938446095505822317253594081284;
-            let struct_to_hash = StructForHash {
-                prefix: 'STARKNET_CONTRACT_ADDRESS',
-                deployer_address: get_contract_address().try_into().unwrap(),
-                salt: salt,
-                class_hash: self.sumo_account_class_hash.read(),
-                constructor_calldata_hash: hash_zero_array,
-            };
-            let hash = struct_to_hash.hash();
-            hash.try_into().unwrap()
-        }
-
         fn only_protocol(self: @ContractState) {
             let sender = get_caller_address();
-            assert(sender.is_zero(), 'Account: invalid caller');
+            assert(sender.is_zero(), LoginErrors::INVALID_CALLER);
             //println!("only_protocol [OK]");
         }
 
         fn validate_tx_version(self: @ContractState) {
             let tx_info = get_tx_info().unbox();
             let tx_version: u256 = tx_info.version.into();
-            assert(tx_version >= 1_u256, 'Fail: Tx_version mismatch');
+            assert(tx_version >= 1_u256, LoginErrors::INVALID_TX_VERSION);
             //println!("validate_tx_version [OK]");
         }
 
@@ -249,10 +211,9 @@ pub mod Login {
             let (eph_key_0, eph_key_1) = eph_key;
             let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
             if !check_ecdsa_signature(tx_hash, reconstructed_eph_key, r, s) {
-                assert(false,'Wrong Signature')
+                assert(false, LoginErrors::INVALID_USER_SIGNATURE)
             }
         }
-
 
         fn validate_tx_admin_signature(self: @ContractState, r:felt252, s:felt252){
             let tx_info = get_tx_info().unbox();
@@ -274,7 +235,7 @@ pub mod Login {
             self: @ContractState, max_block: u256, current_block_number: u64
         ) -> felt252 {
             let masked_max_block: u64 = max_block.try_into().unwrap();
-            assert(current_block_number <= masked_max_block,'Proof expired');
+            assert(current_block_number <= masked_max_block, LoginErrors::EXPIRED_PROOF);
             //println!("validate_block_time [OK]");
             VALIDATED
         }
@@ -287,7 +248,7 @@ pub mod Login {
             )
                 .unwrap_syscall();
             let (verified, res) = Serde::<(bool, Span<u256>)>::deserialize(ref _res).unwrap();
-            assert(verified,'Garagant');
+            assert(verified, LoginErrors::INVALID_PROOF);
             //println!("Garaga Verifier [OK]");
             return res;
         }
@@ -303,7 +264,7 @@ pub mod Login {
 
         fn only_self_call(self: @ContractState, call: Call) {
             let target_address: ContractAddress = call.to;
-            assert(target_address == get_contract_address(), 'Not Allowed Outside Call');
+            assert(target_address == get_contract_address(), LoginErrors::OUTSIDE_CALL);
             //println!("only_self [OK]");
         }
 
@@ -311,26 +272,23 @@ pub mod Login {
             let signature = self.get_serialized_signature();
 
             self.validate_block_time(signature.max_block.into(),get_block_number());
-
             self.validate_oauth_modulus_F(signature.modulus_F);
 
             let all_inputs_hash_garaga = self.garaga_verify_get_public_inputs(signature.garaga);
-            self.validate_all_inputs_hash(all_inputs_hash_garaga);
+            assert(validate_all_inputs_hash(@signature, all_inputs_hash_garaga), LoginErrors::INVALID_ALL_INPUTS_HASH);
 
-            let address_seed_masked = self.mask_address_seed(signature.address_seed);
-
-            let target_address = self.precompute_account_address(address_seed_masked);
+            let target_address = self.get_target_address(signature.address_seed);
+            let is_user = self.user_list.entry(target_address).read();
 
             if call.selector == selector!("deploy") {
-                let is_user = self.user_list.entry(target_address).read();
-                assert(!is_user, 'Allready an user');
-                println!("Ready to deploy at: {:?}", target_address);
+                assert(is_user == false, LoginErrors::IS_USER );
             }
             if call.selector == selector!("login"){
+                assert(is_user, LoginErrors::NOT_USER );
                 let debt = self.user_debt.entry(target_address).read();
-                assert(debt == 0, 'User has a debt');
-                println!("Ready to login at: {:?}", target_address);
+                assert(debt == 0, LoginErrors::HAS_DEBT);
             }
+            println!("Ready to deploy/login at: {:?}", target_address);
         }
 
         fn is_user_entrypoint(self:@ContractState, selector: felt252) -> bool {
@@ -349,66 +307,16 @@ pub mod Login {
             let signature: Signature = Serde::<Signature>::deserialize(ref signer).unwrap();
             return signature;
         }
-        fn mask_address_seed( self: @ContractState, address_seed: u256 ) -> felt252 {
-            let masked_address_seed: felt252 = (address_seed & MASK_250).try_into().unwrap();
-            return masked_address_seed;
-        }
 
         fn validate_oauth_modulus_F(self: @ContractState, modulus_f: u256) {
-            assert(self.oauth_modulus_F.read() == modulus_f, 'Wrong Oauth Signature');
-            //println!("validate_oauth_modulus [OK]")
+            assert(self.oauth_modulus_F.read() == modulus_f, LoginErrors::INVALID_OAUTH_SIGNATURE);
         }
 
-        fn validate_all_inputs_hash( self: @ContractState, all_inputs_hash: Span<u256>)  {
-            let signature = self.get_serialized_signature();
-            let (eph_0, eph_1) = signature.eph_key;
-
-            let inputs: Array<u256> = array![
-                        eph_0.into(),
-                        eph_1.into(),
-                        signature.address_seed.into(),
-                        signature.max_block.into(),
-                        signature.iss_b64_F.into(),
-                        signature.iss_index_in_payload_mod_4.into(),
-                        signature.header_F.into(),
-                        signature.modulus_F.into()
-                    ];
-
-            let sha256_input = self.concatenate_inputs(inputs.span());
-            let hash_result = compute_sha256_byte_array(@sha256_input);
-
-            let left: u256 = *all_inputs_hash.at(0);
-            let right: u256 = (*hash_result.span().at(0)).into();
-            assert(left == right, 'Wrong All Inputs Hash' );
-            //println!("validate_all_inputs_hash [OK]");
-        }
-
-        fn concatenate_inputs(self: @ContractState, inputs: Span<u256>) -> ByteArray {
-            let mut byte_array = Default::default();
-            let mut index = 0_u32;
-            while index < inputs.len() {
-                let int_value: u256 = *inputs.at(index);
-                byte_array.append_word(int_value.high.into(), 16);
-                byte_array.append_word(int_value.low.into(), 16);
-                index += 1;
-            };
-            byte_array
+        fn get_target_address(self: @ContractState, address_seed: u256) -> ContractAddress {
+            let login_address = get_contract_address();
+            let account_class = self.sumo_account_class_hash.read();
+            precompute_account_address(login_address, account_class, address_seed)
         }
     }
 }
 
-#[cfg(test)]
-mod test {
-    const ASD : [felt252;4] = [selector!("asd"), selector!("asd1") , selector!("asd2"), selector!("asd3")];
-
-//    #[test]
-    fn test() {
-        let  mut contains: bool = false;
-        for element in ASD.span() {
-            if *element == selector!("asd4") {
-                contains = true ;
-            }
-        };
-        assert(contains, 'is not contained');
-    }
-}

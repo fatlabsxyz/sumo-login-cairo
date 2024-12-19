@@ -11,6 +11,21 @@ pub struct StructForHash {
     pub constructor_calldata_hash:felt252,
 }
 
+#[derive(Serde, Drop, Debug)]
+pub struct Signature {
+    pub signature_type: felt252,
+    pub r: felt252,
+    pub s: felt252,
+    pub eph_key: (felt252, felt252),
+    pub address_seed: u256,
+    pub max_block: felt252,
+    pub iss_b64_F: u256,
+    pub iss_index_in_payload_mod_4: felt252,
+    pub header_F: u256,
+    pub modulus_F: u256,
+    pub garaga: Span<felt252>
+}
+
 #[derive(Drop, Hash, Serde, Copy)]
 pub struct PublicInputs {
     pub eph_public_key0: u256,

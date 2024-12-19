@@ -53,7 +53,7 @@ fn __validate__correct_signature() {
 }
 
 #[test]
-#[should_panic(expected: 'Wrong Signature')]
+#[should_panic(expected: 'Login: invalid user signature')]
 fn __validate__worng__r() {
     let (login_address, login_dispatcher) = setup_login();
     
@@ -74,7 +74,7 @@ fn __validate__worng__r() {
 }
 
 #[test]
-#[should_panic(expected: 'Wrong Oauth Signature')]
+#[should_panic(expected: 'Login: invalid oauth signature')]
 fn __validate__worng__modulus() {
     let (login_address, login_dispatcher) = setup_login();
     
@@ -96,7 +96,7 @@ fn __validate__worng__modulus() {
 
 
 #[test]
-#[should_panic(expected: 'Wrong All Inputs Hash')]
+#[should_panic(expected: 'Login: invalid AIH')]
 fn __validate__worng__AllInputsHash() {
     //the header is only used in the AIH computation, changing it breaks the
     //AIH validation

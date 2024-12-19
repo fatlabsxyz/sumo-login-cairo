@@ -12,7 +12,7 @@
 
 pub fn signature() -> Span<felt252> {
   let signature: Array<felt252> =   array![
-        0x11521e52f8c6df88dfe834fcac1b6042598fcc06c1f4543c02d256fc25c7b25,
+        0x02ef13d65857314dae3292970fab8340551268d1201f2671f6065f1990558e95,
         0x29428021f4ffa4ece767fffbf194bb16ae8b75dc22454c3cdfcb5f42eb6b5af,
         0x43b37805434b0fa36d5573f2aa17232ec307ba943793732e3fcea1cbd79f3c1,
         0x6363cb464857bb5eddfa351b098bc10,

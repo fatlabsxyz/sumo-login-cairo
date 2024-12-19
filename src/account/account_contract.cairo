@@ -30,6 +30,7 @@ pub mod Account {
     use core::num::traits::Zero;
     use starknet::account::Call;
     use crate::utils::execute::execute_calls;
+    use crate::utils::errors::AccountErrors;
 
     #[storage]
     struct Storage {
@@ -80,7 +81,7 @@ pub mod Account {
                 self.public_key.write(new_key);
                 self.expiration_block.write(expiration_block.try_into().unwrap());
             } else {
-                assert(false, 'Not allowed to set pkey');
+                assert(false, AccountErrors::NOT_ALLOWED);
             }
         }
 
@@ -96,7 +97,7 @@ pub mod Account {
         }
 
         fn cancel_debt(self: @ContractState, amount: u256) {
-            assert(get_caller_address() == self.deployer_address.read(), 'Login addres fail ');
+            assert(get_caller_address() == self.deployer_address.read(), AccountErrors::INVALID_DEPLOYER);
             let sumo_address = self.deployer_address.read();
             //TODO: checkear que tengas plata antes
             let calldata: Array<felt252> = array![
@@ -126,13 +127,13 @@ pub mod Account {
     impl PrivateImpl of IPrivate {
         fn only_protocol(self: @ContractState) {
               let sender = get_caller_address();
-              assert(sender.is_zero(), 'Account: invalid caller');
+              assert(sender.is_zero(), AccountErrors::INVALID_CALLER);
         }
 
         fn validate_tx_version(self: @ContractState) {
             let tx_info = get_tx_info().unbox();
             let tx_version: u256 = tx_info.version.into();
-            assert(tx_version >= 1_u256, 'Fail: Tx_version mismatch');
+            assert(tx_version >= 1_u256, AccountErrors::INVALID_TX_VERSION);
         }
 
 
@@ -140,14 +141,14 @@ pub mod Account {
             let tx_info = get_tx_info().unbox();
             let signature = tx_info.signature;
             let tx_hash = tx_info.transaction_hash;
-            assert(self.is_valid_signature(tx_hash, signature.into()) == VALIDATED, 'Wrong: Signature');
+            assert(self.is_valid_signature(tx_hash, signature.into()) == VALIDATED, AccountErrors::INVALID_SIGNATURE);
         }
 
         fn validate_block_time(self: @ContractState) {
             let max_block = self.expiration_block.read();
             if max_block != 0 {
                 let current = get_block_number();
-                assert(current < max_block, 'Expirated Login')
+                assert(current < max_block, AccountErrors::EXPIRATED_SESSION)
             }
         }
 
