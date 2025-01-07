@@ -2,7 +2,7 @@ use core::starknet::{ContractAddress};
 use starknet::account::Call;
 
 #[starknet::interface]
-pub trait ExternalTrait<TContractState> {
+pub trait IAccount<TContractState> {
     //SRC6 interface
     fn is_valid_signature(self: @TContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252;
     fn __validate__(self: @TContractState, calls: Span<Call>) -> felt252 ;
@@ -50,7 +50,7 @@ pub mod Account {
     }
 
     #[abi(embed_v0)]
-    impl ExternalImpl of super::ExternalTrait<ContractState> {
+    impl AccountImpl of super::IAccount<ContractState> {
         fn is_valid_signature(
             self: @ContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252 {
             let public_key = self.public_key.read();
