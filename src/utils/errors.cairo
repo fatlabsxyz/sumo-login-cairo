@@ -14,6 +14,7 @@ pub mod LoginErrors {
     pub const HAS_NOT_DEBT : felt252 = 'Login: usser has no debt';
     pub const OUTSIDE_CALL : felt252 = 'Login: outside call now allowed';
     pub const SELECTOR_NOT_ALLOWED : felt252 = 'Login: sellector not allowed';
+    pub const NOT_ENOGHT_MONEY : felt252 = 'Login: user can not repay';
 
 }
 
@@ -24,4 +25,5 @@ pub mod AccountErrors {
     pub const INVALID_DEPLOYER : felt252 = 'Account: invalid deployer';
     pub const EXPIRATED_SESSION : felt252 = 'Account: session expirated';
     pub const NOT_ALLOWED : felt252 = 'Account: not allowed';
+    pub const NOT_ENOGHT_MONEY : felt252 = 'Login: user can not repay';
 }

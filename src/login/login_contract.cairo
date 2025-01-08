@@ -35,13 +35,14 @@ pub mod Login {
     use core::starknet::{get_caller_address, get_tx_info, get_block_number, get_contract_address};
 //    use core::starknet::TxInfo;
     use core::num::traits::Zero;
-    use crate::utils::errors::LoginErrors;
+    use crate::utils::errors::{LoginErrors};
     use crate::utils::utils::{validate_all_inputs_hash, mask_address_seed, precompute_account_address};
 
     const USER_ENDPOINTS : [felt252;2] = [selector!("deploy"), selector!("login")];
     const TWO_POWER_128: felt252 = 340282366920938463463374607431768211456;
     const MASK_250: u256 = 1809251394333065553493296640760748560207343510400633813116524750123642650623;
     const GARAGA_VERIFY_CLASSHASH: felt252= 0x013da60eb4381fca5d1e87941579bf09b5218b62db1f812bf6b59999002d230c;
+    const ETH_ADDRRESS: felt252= 0x49D36570D4E46F48E99674BD3FCC84644DDD6B96F7C741B1562B82F9E004DC7;
     const MODULUS_F: u256 = 6472322537804972268794034248194861302128540584786330577698326766016488520183;
     const PKEY: felt252 = 0x6363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f;
     const DEPLOY_FEE: u128 = 1_000_000;
@@ -158,20 +159,21 @@ pub mod Login {
         }
 
         fn collect_debt(ref self: ContractState, user_address:  ContractAddress) {
-            if get_caller_address() != get_contract_address() {
+            let caller = get_caller_address();
+            if ( caller != get_contract_address()) && (caller != user_address) {
                 assert(false, LoginErrors::SELECTOR_NOT_ALLOWED);
             } 
-            
-            let debt = self.user_debt.entry(user_address).read();
-            if debt <= 0 {
-                assert(false, LoginErrors::HAS_NOT_DEBT) 
+
+            if !self.user_list.entry(user_address).read() { 
+                assert(false, LoginErrors::NOT_USER);
             }
 
             syscalls::call_contract_syscall(
                user_address,
-               selector!("cancel_debt"),
-               array![debt.try_into().unwrap()].span()
+               selector!("transfer_to_deployer"),
+               array![].span()
             ).unwrap_syscall();
+
             self.user_debt.entry(user_address).write(0);
         }
 

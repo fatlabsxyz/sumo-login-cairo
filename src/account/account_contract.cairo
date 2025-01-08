@@ -10,16 +10,18 @@ pub trait IAccount<TContractState> {
 
     //SUMO interface
     fn change_pkey(ref self: TContractState, new_key: felt252, expiration_block:felt252);
-    fn get_my_debt(self: @TContractState) -> u128;
-    fn cancel_debt(self: @TContractState, amount: u256);
+    fn transfer_to_deployer(ref self: TContractState);
+//    fn cancel_debt(self: @TContractState, debt: u128);
 
     //for testing
+    fn get_my_debt(self: @TContractState) -> u128;
     fn get_pkey(self: @TContractState) -> felt252;
     fn get_deployer_address(self: @TContractState) -> ContractAddress;
 }
 
 #[starknet::contract(account)]
 pub mod Account {
+    const DEPLOY_FEE: u128 = 1_000_000;
     const ETH_ADDRRESS: felt252= 0x49D36570D4E46F48E99674BD3FCC84644DDD6B96F7C741B1562B82F9E004DC7;
     use core::ecdsa::check_ecdsa_signature;
     use core::starknet::{syscalls,SyscallResultTrait};
@@ -37,6 +39,7 @@ pub mod Account {
         deployer_address: ContractAddress,
         public_key: felt252,
         expiration_block: u64,
+        debt: u128,
     }
 
     #[constructor]
@@ -47,6 +50,7 @@ pub mod Account {
         //ir a cambiarlo
         let deployer_address = get_caller_address();
         self.deployer_address.write(deployer_address);
+        self.debt.write(DEPLOY_FEE);
     }
 
     #[abi(embed_v0)]
@@ -71,7 +75,8 @@ pub mod Account {
         fn __execute__(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
             self.only_protocol();
             self.validate_tx_version();
-            self.pay_debt();
+            self.sync_debt();
+            self.call_for_collect();
             execute_calls(calls)
         }
 
@@ -86,31 +91,25 @@ pub mod Account {
         }
 
         fn get_my_debt(self: @ContractState) -> u128 {
-            let to = self.deployer_address.read();
-            let res = syscalls::call_contract_syscall(
-               to,
-               selector!("get_user_debt"),
-               array![get_contract_address().into()].span()
-            ).unwrap_syscall();
-            let debt: u128 = (*res.at(0)).try_into().unwrap();
-            debt
+            self.debt.read()
         }
 
-        fn cancel_debt(self: @ContractState, amount: u256) {
-            assert(get_caller_address() == self.deployer_address.read(), AccountErrors::INVALID_DEPLOYER);
-            let sumo_address = self.deployer_address.read();
-            //TODO: checkear que tengas plata antes
-            let calldata: Array<felt252> = array![
-                sumo_address.into(),
-                amount.low.into(),
-                amount.high.into(),
-            ];
-            syscalls::call_contract_syscall(
-               ETH_ADDRRESS.try_into().unwrap(),
-               selector!("transfer"),
-               calldata.span()
-            ).unwrap_syscall();
-        }
+
+//        fn cancel_debt(self: @ContractState, debt: u128) {
+//            let sumo_address = self.deployer_address.read();
+//            assert(get_caller_address() == sumo_address, AccountErrors::INVALID_DEPLOYER);
+//            let amount: u256 = debt.into();
+//            let calldata: Array<felt252> = array![
+//                sumo_address.into(),
+//                amount.low.into(),
+//                amount.high.into(),
+//            ];
+//            syscalls::call_contract_syscall(
+//               ETH_ADDRRESS.try_into().unwrap(),
+//               selector!("transfer"),
+//               calldata.span()
+//            ).unwrap_syscall();
+//        }
 
         fn get_pkey(self: @ContractState) -> felt252 {
             self.public_key.read()
@@ -120,11 +119,30 @@ pub mod Account {
             self.deployer_address.read()
         }
 
+        fn transfer_to_deployer(ref self: ContractState) {
+            let caller = get_caller_address();
+            if caller != self.deployer_address.read() {  assert(false, AccountErrors::INVALID_DEPLOYER) }
+
+            let debt: u256 = self.debt.read().into();
+            let balance  = self.get_balance();
+
+            if debt > balance { assert(false, AccountErrors::NOT_ENOGHT_MONEY) } 
+
+            let calldata = array![
+                caller.into(),
+                debt.low.into(),
+                debt.high.into(),];
+            syscalls::call_contract_syscall(
+               ETH_ADDRRESS.try_into().unwrap(),
+               selector!("transfer"),
+               calldata.span()
+            ).unwrap_syscall();
+        }
     }
 
 
     #[generate_trait]
-    impl PrivateImpl of IPrivate {
+    pub impl PrivateImpl of IPrivate {
         fn only_protocol(self: @ContractState) {
               let sender = get_caller_address();
               assert(sender.is_zero(), AccountErrors::INVALID_CALLER);
@@ -135,7 +153,6 @@ pub mod Account {
             let tx_version: u256 = tx_info.version.into();
             assert(tx_version >= 1_u256, AccountErrors::INVALID_TX_VERSION);
         }
-
 
         fn validate_tx_signature(self: @ContractState){
             let tx_info = get_tx_info().unbox();
@@ -152,22 +169,36 @@ pub mod Account {
             }
         }
 
+        fn call_for_collect(self: @ContractState) {
+            syscalls::call_contract_syscall(
+               self.deployer_address.read(),
+               selector!("collect_debt"),
+               array![get_contract_address().into()].span()
+            ).unwrap_syscall();
+        }
 
-        fn pay_debt(self: @ContractState) {
-            let debt : u256 = self.get_my_debt().into();
-            if debt > 0 {
-                //TODO: checkear que tengas plata antes
-                let calldata: Array<felt252> = array![
-                    self.deployer_address.read().into(),
-                    debt.low.into(),
-                    debt.high.into(),
-                ];
-                syscalls::call_contract_syscall(
-                   ETH_ADDRRESS.try_into().unwrap(),
-                   selector!("transfer"),
-                   calldata.span()
-                ).unwrap_syscall();
-            }
+        fn sync_debt(ref self: ContractState) {
+            let to = self.deployer_address.read();
+            let res = syscalls::call_contract_syscall(
+               to,
+               selector!("get_user_debt"),
+               array![get_contract_address().into()].span()
+            ).unwrap_syscall();
+            let debt: u128 = (*res.at(0)).try_into().unwrap();
+            self.debt.write(debt);
+        }
+
+        fn get_balance(self: @ContractState) -> u256 {
+            let response = syscalls::call_contract_syscall(
+               ETH_ADDRRESS.try_into().unwrap(),
+               selector!("balance_of"),
+               array![get_contract_address().into()].span(),
+            ).unwrap_syscall();
+
+            let low: u128 = (*response[0]).try_into().unwrap();
+            let high: u128 = (*response[1]).try_into().unwrap();
+            let amount = u256{ low , high }; 
+            return amount;
         }
     }
 }
