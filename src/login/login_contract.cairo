@@ -137,7 +137,7 @@ pub mod Login {
             let expiration_block:u64 = signature.max_block.try_into().unwrap();
             self.set_user_pkey(address, reconstructed_eph_key ,expiration_block);
             self.add_debt(address,DEPLOY_FEE);
-            println!("Deployed address {:?}", address);
+//            println!("Deployed address {:?}", address);
             address
         }
 

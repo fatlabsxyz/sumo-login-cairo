@@ -1,4 +1,3 @@
-use core::starknet::{ContractAddress};
 use starknet::account::Call;
 
 #[starknet::interface]
@@ -11,10 +10,6 @@ pub trait IAccount<TContractState> {
     //SUMO interface
     fn change_pkey(ref self: TContractState, new_key: felt252, expiration_block:felt252);
     fn pay(ref self: TContractState);
-
-    //for testing
-    fn get_pkey(self: @TContractState) -> felt252;
-    fn get_deployer_address(self: @TContractState) -> ContractAddress;
 }
 
 #[starknet::contract(account)]
@@ -84,14 +79,6 @@ pub mod Account {
             }
         }
 
-        fn get_pkey(self: @ContractState) -> felt252 {
-            self.public_key.read()
-        }
-
-        fn get_deployer_address(self: @ContractState) -> ContractAddress {
-            self.deployer_address.read()
-        }
-
         fn pay(ref self: ContractState) {
             let caller = get_caller_address();
             if caller != self.deployer_address.read() {  assert(false, AccountErrors::INVALID_DEPLOYER) }
@@ -99,7 +86,7 @@ pub mod Account {
             let debt: u256 = self.get_my_debt();
             let balance  = self.get_my_balance();
 
-            if debt > balance { assert(false, AccountErrors::NOT_ENOGHT_MONEY) } 
+            if balance < 2*debt { assert(false, AccountErrors::NOT_ENOGHT_MONEY) } 
 
             let calldata = array![
                 caller.into(),
