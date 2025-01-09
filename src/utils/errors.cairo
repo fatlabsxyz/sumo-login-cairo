@@ -25,5 +25,5 @@ pub mod AccountErrors {
     pub const INVALID_DEPLOYER : felt252 = 'Account: invalid deployer';
     pub const EXPIRATED_SESSION : felt252 = 'Account: session expirated';
     pub const NOT_ALLOWED : felt252 = 'Account: not allowed';
-    pub const NOT_ENOGHT_MONEY : felt252 = 'Login: user can not repay';
+    pub const NOT_ENOGHT_MONEY : felt252 = 'Account: not enough to repay';
 }

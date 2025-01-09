@@ -168,9 +168,12 @@ pub mod Login {
                 assert(false, LoginErrors::NOT_USER);
             }
 
+            let debt = self.user_debt.entry(user_address).read();
+            if debt == 0 { return;} 
+
             syscalls::call_contract_syscall(
                user_address,
-               selector!("transfer_to_deployer"),
+               selector!("pay"),
                array![].span()
             ).unwrap_syscall();
 

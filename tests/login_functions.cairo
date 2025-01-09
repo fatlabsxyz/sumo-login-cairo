@@ -15,7 +15,6 @@ const DEPLOY_FEE: u128 = 1_000_000;
 const LOGIN_FEE: u128 = 1_000_000;
 const ETH_ADDRRESS: felt252= 0x49D36570D4E46F48E99674BD3FCC84644DDD6B96F7C741B1562B82F9E004DC7;
 const INITIAL_BALANCE : u256 = 1_000_000_000_u256;
-
 fn balance_of(address: ContractAddress) -> u256 {
     let balance = syscalls::call_contract_syscall(
                ETH_ADDRRESS.try_into().unwrap(),
@@ -67,15 +66,11 @@ fn collect_debt() {
     let initial_debt = login_dispatcher.get_user_debt(account_address);
     if initial_debt != DEPLOY_FEE {assert(false, 'Debt: Not Asigned') };
 
-    let initial_debt_u = account_dispatcher.get_my_debt();
-    println!("Debt L :{:?} --- Debt U {:?}",initial_debt, initial_debt_u);
-    if initial_debt_u != initial_debt {assert(false, 'Debt: Does not match')}
-
     let balance_account = balance_of(account_address);
     if balance_account != 0 { assert(false, 'Balance: Initial not zero') } 
 
     println!("Account Deployed");
-    println!("Account Balance {:?} --- Account Debt {:?} ", balance_account, initial_debt_u);
+    println!("Account Balance {:?} --- Account Debt {:?} ", balance_account, initial_debt);
 
     println!("Funding Account");
     let transfer_amount: u256 = 3_000_000_u256;
@@ -83,7 +78,7 @@ fn collect_debt() {
 
     let balance_account = balance_of(account_address);
     if balance_account != transfer_amount { assert(false, 'Transfer: Wrong amount') } 
-    println!("Account Balance {:?} --- Account Debt {:?} ", balance_account, initial_debt_u);
+    println!("Account Balance {:?} --- Account Debt {:?} ", balance_account, initial_debt);
 //
     start_cheat_caller_address(login_address, login_address);
     login_dispatcher.collect_debt(account_address);
@@ -95,40 +90,3 @@ fn collect_debt() {
     if new_debt != 0 { assert(false, 'Debt not cleansed') }
 
 }
-
-fn call_execute(address: ContractAddress) {
-    let zero = contract_address_const::<0>();
-    start_cheat_caller_address(address, zero);
-    let call: Call = Call{to:address.try_into().unwrap(),
-        selector:selector!("get_my_debt"),
-        calldata:array![].span()};
-    let dispatcher = IAccountDispatcher {contract_address: address};
-    dispatcher.__execute__(array![call].span());
-}
-
-//#[test]
-//#[should_panic(expected: 'Account: not enoght to repay')]
-//fn account_blocked() {
-//    let (login_address, login_dispatcher) = setup_login();
-//    let signature = signature();
-//    start_cheat_signature(login_address , signature) ;
-//    let account_address: ContractAddress  = login_dispatcher.deploy();
-//    let account_dispatcher = IAccountDispatcher {contract_address: address};
-//    account_dispatcher.call_for_collect();
-//}
-
-//#[test]
-//fn repay_on_execute() {
-//    let (login_address, login_dispatcher) = setup_login();
-//    let signature = signature();
-//    start_cheat_signature(login_address , signature) ;
-//    let account_address: ContractAddress  = login_dispatcher.deploy();
-//    transfer(login_address, account_address, 3_000_000_u256);
-//    let initial_balance = balance_of(account_address);
-//    let initial_debt = login_dispatcher.get_user_debt(account_address);
-//    call_execute(account_address);
-//    let balance = balance_of(account_address);
-//    let debt = login_dispatcher.get_user_debt(account_address);
-//    if balance != initial_balance - initial_debt.into() { assert(false,'Transfer: Debt not payed') }
-//    if debt != 0 { assert(false, 'Debt not cleansed') }
-//}
