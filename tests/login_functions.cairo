@@ -1,7 +1,7 @@
 use crate::setup::{setup_login};
-use starknet::{contract_address_const};
+//use starknet::{contract_address_const};
 use crate::signature::{signature};
-use core::starknet::account::Call;
+//use core::starknet::account::Call;
 use core::starknet::{ContractAddress};
 //use core::starknet::account::Call;
 use snforge_std::{start_cheat_signature,start_cheat_caller_address, stop_cheat_caller_address};
@@ -10,14 +10,12 @@ use core::starknet::{syscalls,SyscallResultTrait};
 use sumo::login::login_contract::ILoginDispatcherTrait;
 use sumo::account::account_contract::IAccountDispatcher;
 use sumo::account::account_contract::IAccountDispatcherTrait;
+use sumo::utils::constants::{STRK_ADDRESS, DEPLOY_FEE};
 
-const DEPLOY_FEE: u128 = 1_000_000;
-const LOGIN_FEE: u128 = 1_000_000;
-const ETH_ADDRRESS: felt252= 0x49D36570D4E46F48E99674BD3FCC84644DDD6B96F7C741B1562B82F9E004DC7;
 const INITIAL_BALANCE : u256 = 1_000_000_000_u256;
 fn balance_of(address: ContractAddress) -> u256 {
     let balance = syscalls::call_contract_syscall(
-               ETH_ADDRRESS.try_into().unwrap(),
+               STRK_ADDRESS.try_into().unwrap(),
                selector!("balance_of"),
                array![address.into()].span()
             ).unwrap_syscall();
@@ -28,18 +26,18 @@ fn balance_of(address: ContractAddress) -> u256 {
 }
 
 fn transfer(from: ContractAddress, to:ContractAddress, amount: u256) {
-    start_cheat_caller_address(ETH_ADDRRESS.try_into().unwrap(), from);
+    start_cheat_caller_address(STRK_ADDRESS.try_into().unwrap(), from);
     let recipient: felt252 = to.try_into().unwrap();
     let low: felt252 = amount.low.try_into().unwrap();
     let high: felt252 = amount.high.try_into().unwrap();
     let calldata: Array<felt252> = array![recipient,low,high];
 
     let _ = syscalls::call_contract_syscall(
-               ETH_ADDRRESS.try_into().unwrap(),
+               STRK_ADDRESS.try_into().unwrap(),
                selector!("transfer"),
                calldata.span(),
             ).unwrap_syscall();
-    stop_cheat_caller_address(ETH_ADDRRESS.try_into().unwrap());
+    stop_cheat_caller_address(STRK_ADDRESS.try_into().unwrap());
 }
 
 

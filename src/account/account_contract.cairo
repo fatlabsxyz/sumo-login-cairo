@@ -19,8 +19,6 @@ pub trait IAccount<TContractState> {
 
 #[starknet::contract(account)]
 pub mod Account {
-    const DEPLOY_FEE: u128 = 1_000_000;
-    const ETH_ADDRRESS: felt252= 0x49D36570D4E46F48E99674BD3FCC84644DDD6B96F7C741B1562B82F9E004DC7;
     use core::ecdsa::check_ecdsa_signature;
     use core::starknet::{syscalls,SyscallResultTrait};
     use core::starknet::{ContractAddress};
@@ -31,13 +29,13 @@ pub mod Account {
     use starknet::account::Call;
     use crate::utils::execute::execute_calls;
     use crate::utils::errors::AccountErrors;
+    use crate::utils::constants::STRK_ADDRESS;
 
     #[storage]
     struct Storage {
         deployer_address: ContractAddress,
         public_key: felt252,
         expiration_block: u64,
-        debt: u128,
     }
 
     #[constructor]
@@ -48,7 +46,6 @@ pub mod Account {
         //ir a cambiarlo
         let deployer_address = get_caller_address();
         self.deployer_address.write(deployer_address);
-        self.debt.write(DEPLOY_FEE);
     }
 
     #[abi(embed_v0)]
@@ -109,14 +106,13 @@ pub mod Account {
                 debt.low.into(),
                 debt.high.into(),];
             syscalls::call_contract_syscall(
-               ETH_ADDRRESS.try_into().unwrap(),
+               STRK_ADDRESS.try_into().unwrap(),
                selector!("transfer"),
                calldata.span()
             ).unwrap_syscall();
             //TODO: return payed_amount. This way Login Contract can store how much of the debt was payed.
         }
     }
-
 
     #[generate_trait]
     pub impl PrivateImpl of IPrivate {
@@ -168,7 +164,7 @@ pub mod Account {
 
         fn get_my_balance(self: @ContractState) -> u256 {
             let response = syscalls::call_contract_syscall(
-               ETH_ADDRRESS.try_into().unwrap(),
+               STRK_ADDRESS.try_into().unwrap(),
                selector!("balance_of"),
                array![get_contract_address().into()].span(),
             ).unwrap_syscall();

@@ -37,16 +37,9 @@ pub mod Login {
     use core::num::traits::Zero;
     use crate::utils::errors::{LoginErrors};
     use crate::utils::utils::{validate_all_inputs_hash, mask_address_seed, precompute_account_address};
+    use crate::utils::constants::{MODULUS_F, TWO_POWER_128, LOGIN_FEE, DEPLOY_FEE, GARAGA_VERIFY_CLASSHASH };
 
     const USER_ENDPOINTS : [felt252;2] = [selector!("deploy"), selector!("login")];
-    const TWO_POWER_128: felt252 = 340282366920938463463374607431768211456;
-    const MASK_250: u256 = 1809251394333065553493296640760748560207343510400633813116524750123642650623;
-    const GARAGA_VERIFY_CLASSHASH: felt252= 0x013da60eb4381fca5d1e87941579bf09b5218b62db1f812bf6b59999002d230c;
-    const ETH_ADDRRESS: felt252= 0x49D36570D4E46F48E99674BD3FCC84644DDD6B96F7C741B1562B82F9E004DC7;
-    const MODULUS_F: u256 = 6472322537804972268794034248194861302128540584786330577698326766016488520183;
-    const PKEY: felt252 = 0x6363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f;
-    const DEPLOY_FEE: u128 = 1_000_000;
-    const LOGIN_FEE: u128 = 1_000_000;
 
     #[storage]
     struct Storage {
@@ -57,9 +50,9 @@ pub mod Login {
         oauth_modulus_F: u256,
     }
 
-
     #[constructor]
-    fn constructor(ref self: ContractState, sumo_account_class_hash: felt252) {
+    fn constructor(ref self: ContractState, sumo_account_class_hash: felt252, public_key: felt252) {
+        self.public_key.write(public_key);
         self.sumo_account_class_hash.write(sumo_account_class_hash);
         self.oauth_modulus_F.write(MODULUS_F);
     }
@@ -108,6 +101,10 @@ pub mod Login {
         }
 
         fn login(ref self:ContractState) {
+            //to reach this function the user has to have no debt. Otherwise it is rejected in the 
+            //validate. We cannot check in the validate if he has a way to pay for the login in the validate.
+            //If he has a way to pay, collect_debt will succeed. If not, he will have a new debt a he will not
+            //be abble to use login if he does not pays his debt before.
             let signature = self.get_serialized_signature();
             let (eph_key_0,eph_key_1) = signature.eph_key;
             let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
@@ -117,6 +114,8 @@ pub mod Login {
 
             self.set_user_pkey(user_address, reconstructed_eph_key, expiration_block);
             self.add_debt(user_address,LOGIN_FEE);
+            self.collect_debt(user_address);
+
         }
 
         fn deploy(ref self: ContractState) -> ContractAddress {
@@ -130,7 +129,7 @@ pub mod Login {
                     core::bool::False
                 ).unwrap_syscall();
             let precomputed_address = self.get_target_address(signature.address_seed);
-            assert!(precomputed_address == address, "Precomputed Address does not match");
+            assert(precomputed_address == address, LoginErrors::PRECOMP_ADDRESS_FAIL);
             self.user_list.entry(address).write(true);
 
             let (eph_key_0,eph_key_1) = signature.eph_key;
@@ -144,9 +143,7 @@ pub mod Login {
 
         fn is_valid_signature(
             self: @ContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252 {
-            //TODO: Acomodar esto
-            //let public_key = self.public_key.read();
-            let public_key = PKEY;
+            let public_key = self.public_key.read();
             if check_ecdsa_signature(msg_hash, public_key, *signature.at(0_u32), *signature.at(1_u32)) {
                 VALIDATED
             } else {
@@ -224,7 +221,7 @@ pub mod Login {
             let tx_info = get_tx_info().unbox();
             let tx_hash = tx_info.transaction_hash;
             let rs:Array<felt252> = array![r,s];
-            assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, 'Wrong: Signature');
+            assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, LoginErrors::INVALID_PROOF);
         }
 
         fn set_user_pkey(self: @ContractState, user_address: ContractAddress, eph_pkey: felt252, expiration_block:u64) {
