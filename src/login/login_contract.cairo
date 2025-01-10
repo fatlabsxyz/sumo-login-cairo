@@ -8,12 +8,14 @@ pub trait ILogin<TContractState> {
     fn __execute__(ref self: TContractState, calls: Span<Call>) -> Array<Span<felt252>> ;
     fn __validate_declare__(ref self: TContractState, declared_class_hash: felt252) -> felt252;
 
-    fn deploy(ref self: TContractState) -> ContractAddress ;
-    fn login(ref self: TContractState) ;
     fn is_sumo_user(self: @TContractState, user_address: ContractAddress) -> bool;
     fn update_oauth_public_key(ref self: TContractState);
     fn get_user_debt(self: @TContractState, user_address: ContractAddress) -> u128;
     fn collect_debt(ref self: TContractState, user_address: ContractAddress);
+
+    //user entrypoint
+    fn deploy(ref self: TContractState) -> ContractAddress ;
+    fn login(ref self: TContractState) ;
 }
 
 #[starknet::contract(account)]
@@ -65,8 +67,15 @@ pub mod Login {
         }
 
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
+            //this two functions are only necesary in the execute as far as I know: Alba
+            //if removed we need to slightly change the tests
             self.only_protocol();
             self.validate_tx_version();
+            //Login is an account. So a malicious actor could try to impersonate us to try to execute functions.
+            //Naturally this account have a private key that only Admin has.
+            //An user without a previous account has to be able to deploy his/her account. In order to do that we have to give some access to the user to impersonate us (whitout having the SK). The __validate__ should pass for a user if he/her has a valid proof signed by the oauth and by his/her (newly generated) secret key. The only methods allowed for an user are login and deploy. 
+
+            //TODO: We dont know if the serialization would work for an admin signature with very few felts.
             let signature = self.get_serialized_signature();
 
             if signature.signature_type == selector!("signature/user") {
@@ -265,6 +274,7 @@ pub mod Login {
         }
 
         fn only_self_call(self: @ContractState, call: Call) {
+            //this is to avoid to call login/deploy functions that are in other contracts that is not this one.
             let target_address: ContractAddress = call.to;
             assert(target_address == get_contract_address(), LoginErrors::OUTSIDE_CALL);
             //println!("only_self [OK]");
@@ -291,7 +301,7 @@ pub mod Login {
                 let debt = self.user_debt.entry(target_address).read();
                 assert(debt == 0, LoginErrors::HAS_DEBT);
             }
-            println!("Ready to deploy/login at: {:?}", target_address);
+//            println!("Ready to deploy/login at: {:?}", target_address);
         }
 
         fn is_user_entrypoint(self:@ContractState, selector: felt252) -> bool {
