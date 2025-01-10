@@ -76,9 +76,12 @@ pub mod Login {
             //An user without a previous account has to be able to deploy his/her account. In order to do that we have to give some access to the user to impersonate us (whitout having the SK). The __validate__ should pass for a user if he/her has a valid proof signed by the oauth and by his/her (newly generated) secret key. The only methods allowed for an user are login and deploy. 
 
             //TODO: We dont know if the serialization would work for an admin signature with very few felts.
-            let signature = self.get_serialized_signature();
 
-            if signature.signature_type == selector!("signature/user") {
+            let tx = get_tx_info().unbox();
+            let mut signer = tx.signature;
+
+            if *signer.at(0) == selector!("signature/user") {
+                let signature = self.get_serialized_signature();
                 assert(calls.len() == 1, LoginErrors::MULTICALLS);
                 let call = calls[0];
                 self.only_self_call(*call);
@@ -86,8 +89,10 @@ pub mod Login {
                 self.validate_tx_user_signature(signature.eph_key, signature.r, signature.s);
                 self.validate_login_deploy_call(*call);
 
-            } else if signature.signature_type == selector!("signature/admin") {
-                self.validate_tx_admin_signature(signature.r, signature.s);
+            } else if *signer.at(0) == selector!("signature/admin") {
+                let r = *signer.at(1);
+                let s = *signer.at(2);
+                self.validate_tx_admin_signature(r, s);
                 for call in calls {
                     //admin cannot call login/deploy selector with his key
                     assert(!self.is_user_entrypoint(*call.selector), LoginErrors::SELECTOR_NOT_ALLOWED)
@@ -230,7 +235,7 @@ pub mod Login {
             let tx_info = get_tx_info().unbox();
             let tx_hash = tx_info.transaction_hash;
             let rs:Array<felt252> = array![r,s];
-            assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, LoginErrors::INVALID_PROOF);
+            assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, LoginErrors::INVALID_ADMING_SIGNATURE);
         }
 
         fn set_user_pkey(self: @ContractState, user_address: ContractAddress, eph_pkey: felt252, expiration_block:u64) {
@@ -317,6 +322,8 @@ pub mod Login {
         fn get_serialized_signature(self:@ContractState) -> Signature {
             let tx = get_tx_info().unbox();
             let mut signer = tx.signature;
+            //TODO: handle the error that might occur if the  signature is incomplete.
+            //otherwise it will throw 'unwraped failed' which is a really confussing error.
             let signature: Signature = Serde::<Signature>::deserialize(ref signer).unwrap();
             return signature;
         }
