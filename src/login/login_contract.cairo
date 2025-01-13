@@ -53,6 +53,11 @@ pub mod Login {
     }
 
     #[constructor]
+    /// Initializes this contract.
+    ///
+    /// The deployer has to provide:
+    /// - The class hash of the sumo Account contract.
+    /// - The public key of this account.
     fn constructor(ref self: ContractState, sumo_account_class_hash: felt252, public_key: felt252) {
         self.public_key.write(public_key);
         self.sumo_account_class_hash.write(sumo_account_class_hash);
@@ -61,21 +66,23 @@ pub mod Login {
 
     #[abi(embed_v0)]
     impl LoginImpl of super::ILogin<ContractState> {
+        //TODO: Sacar esto si no se va a declarar ningun contrato
         fn __validate_declare__(ref self: ContractState, declared_class_hash: felt252) -> felt252 {
-            self.sumo_account_class_hash.write(declared_class_hash);
             VALIDATED
         }
 
+        /// Verifies that the signature of the transaction is valid.
+        ///
+        /// There are two signature types that are valid. The first felt of each signature is ussed to classify them in:
+        /// - Admin signature: Is the signature associated to the owner of this account. It is the ussual ECDSA. 
+        /// - User signature: Is the signature associated to an user that pretends to deploy or login
+        ///   to his/her sumo account. It is a span of felts necesary for the validation of the ZK proof.
+        ///
+        /// User transactions can only call the Deploy/Login methods of this account while Admin transaction are 
+        /// normal transaction with the exception that cannot call the Deploy/Login methods of this account.
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
-            //this two functions are only necesary in the execute as far as I know: Alba
-            //if removed we need to slightly change the tests
             self.only_protocol();
             self.validate_tx_version();
-            //Login is an account. So a malicious actor could try to impersonate us to try to execute functions.
-            //Naturally this account have a private key that only Admin has.
-            //An user without a previous account has to be able to deploy his/her account. In order to do that we have to give some access to the user to impersonate us (whitout having the SK). The __validate__ should pass for a user if he/her has a valid proof signed by the oauth and by his/her (newly generated) secret key. The only methods allowed for an user are login and deploy. 
-
-            //TODO: We dont know if the serialization would work for an admin signature with very few felts.
 
             let tx = get_tx_info().unbox();
             let mut signer = tx.signature;
@@ -103,17 +110,26 @@ pub mod Login {
             VALIDATED
         }
 
+        /// Executes a list of calls from the account.
+        ///
+        /// - The transaction version must be greater than or equal to 1.
+        /// - The function ins only accesible by the protocol.
         fn __execute__(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
-//            println!("entering __execute__");
             self.only_protocol();
             self.validate_tx_version();
             execute_calls(calls)
         }
         
+        /// Verifies if a given address is a sumo account deployed by this Login account.
         fn is_sumo_user(self: @ContractState, user_address: ContractAddress) -> bool {
             self.user_list.entry(user_address).read()
         }
 
+        /// Executes the Log In of the usser
+        ///
+        /// This function can olny be reach by an usser with a valid ZK proof with a previous debt free sumo 
+        /// Account. The function changes user's public key (and expiration time) to the new one given
+        /// in the transaction.
         fn login(ref self:ContractState) {
             //to reach this function the user has to have no debt. Otherwise it is rejected in the 
             //validate. We cannot check in the validate if he has a way to pay for the login in the validate.
@@ -128,10 +144,15 @@ pub mod Login {
 
             self.set_user_pkey(user_address, reconstructed_eph_key, expiration_block);
             self.add_debt(user_address,LOGIN_FEE);
-            self.collect_debt(user_address);
-
+            //TODO: que hacer con esto? si ponemos el collect la transaccion puede tirar error por saldo insuficiente
+            // pero al usuario se le cambio la pkey
+            //self.collect_debt(user_address);
         }
 
+        /// Deploys a new sumo Account with the data given in the ZK proof.
+        ///
+        /// This function can olny be reach by an usser with a valid ZK proof without a previous sumo Account.
+        /// After deploy, sets the public key (and expiration time) to given in the transaction.
         fn deploy(ref self: ContractState) -> ContractAddress {
 //            println!("Entering deploy");
             let signature = self.get_serialized_signature();
@@ -155,6 +176,9 @@ pub mod Login {
             address
         }
 
+
+        /// Verifies that the given signature is valid for the given hash and the secret key paired whit
+        /// the public key of this account.
         fn is_valid_signature(
             self: @ContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252 {
             let public_key = self.public_key.read();
@@ -165,10 +189,17 @@ pub mod Login {
             }
         }
 
+        /// Recovers the debt of the given address.
         fn get_user_debt(self: @ContractState, user_address:ContractAddress) -> u128 {
             self.user_debt.entry(user_address).read()
         }
 
+        /// Makes the given sumo account to pay its debt if posible.
+        ///
+        /// This function can be called by:
+        /// - The owner the given account, each time it tries to execute a transaction.
+        ///   This enforces that the account will pay its debt as soon as posible.
+        /// - The owner of this sumo Login account. 
         fn collect_debt(ref self: ContractState, user_address:  ContractAddress) {
             let caller = get_caller_address();
             if ( caller != get_contract_address()) && (caller != user_address) {
@@ -191,6 +222,7 @@ pub mod Login {
             self.user_debt.entry(user_address).write(0);
         }
 
+        /// Updates the stored public key of the OAuth provider.
         fn  update_oauth_public_key(ref self: ContractState) {
             let old_key = self.oauth_modulus_F.read();
             let new_key = oracle_check();
@@ -202,18 +234,25 @@ pub mod Login {
 
     #[generate_trait]
     pub impl PrivateImpl of IPrivate {
+        /// Adds a debt to the given contract address. 
+        ///
+        /// This occurs in two ocations:
+        /// - When deploying a new account DEPLOY_FEE is added as debt to that account.
+        /// - When updating the publick key a pre-existing user.
+        /// In both of these situations the user has to provide a valid ZK proof of his/her identity.
         fn add_debt(ref self: ContractState, address: ContractAddress, value: u128) {
-//            println!("adding debt");
             let current_debt: u128 = self.user_debt.entry(address).read();
             self.user_debt.entry(address).write(current_debt + value);
         }
 
+        ///Verifies that the caller address is zero. i.e. the caller is the protocol.
         fn only_protocol(self: @ContractState) {
             let sender = get_caller_address();
             assert(sender.is_zero(), LoginErrors::INVALID_CALLER);
             //println!("only_protocol [OK]");
         }
 
+        /// Verifies that the transaction version is at least 1.
         fn validate_tx_version(self: @ContractState) {
             let tx_info = get_tx_info().unbox();
             let tx_version: u256 = tx_info.version.into();
@@ -221,6 +260,11 @@ pub mod Login {
             //println!("validate_tx_version [OK]");
         }
 
+        /// Verifies that the incoming transaction is signed by the private key paired with the public key
+        /// that is part of the ZK proof.
+        ///
+        /// As part of the sumo ZK protocol the user generates a pair (pk,sk). The transaction Deploy/Login
+        /// is signed by the newly generated secret key and the public key is send in the transaction.
         fn validate_tx_user_signature(self: @ContractState, eph_key:(felt252,felt252), r:felt252, s:felt252){
             let tx_info = get_tx_info().unbox();
             let tx_hash = tx_info.transaction_hash;
@@ -231,6 +275,7 @@ pub mod Login {
             }
         }
 
+        /// Verifies that the incoming transaction is signed by the private key of this account.
         fn validate_tx_admin_signature(self: @ContractState, r:felt252, s:felt252){
             let tx_info = get_tx_info().unbox();
             let tx_hash = tx_info.transaction_hash;
@@ -238,6 +283,7 @@ pub mod Login {
             assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, LoginErrors::INVALID_ADMING_SIGNATURE);
         }
 
+        /// Updates the publick (and its expiration block) stored in the given account address.
         fn set_user_pkey(self: @ContractState, user_address: ContractAddress, eph_pkey: felt252, expiration_block:u64) {
             let calldata : Array<felt252> = array![eph_pkey, expiration_block.try_into().unwrap()];
                 syscalls::call_contract_syscall(
@@ -247,15 +293,16 @@ pub mod Login {
                 ).unwrap_syscall();
         }
 
+        /// Verifies that the ZK proof is not expired.
         fn validate_block_time(
             self: @ContractState, max_block: u256, current_block_number: u64
         ) -> felt252 {
             let masked_max_block: u64 = max_block.try_into().unwrap();
             assert(current_block_number <= masked_max_block, LoginErrors::EXPIRED_PROOF);
-            //println!("validate_block_time [OK]");
             VALIDATED
         }
 
+        /// Verifies that the ZK proof is valid and recovers the public inputs bounded to the proof.
         fn garaga_verify_get_public_inputs(self: @ContractState, calldata: Span<felt252>) ->  Span<u256> {
             let mut _res = syscalls::library_call_syscall(
                 GARAGA_VERIFY_CLASSHASH.try_into().unwrap(),
@@ -265,18 +312,26 @@ pub mod Login {
                 .unwrap_syscall();
             let (verified, res) = Serde::<(bool, Span<u256>)>::deserialize(ref _res).unwrap();
             assert(verified, LoginErrors::INVALID_PROOF);
-            //println!("Garaga Verifier [OK]");
             return res;
         }
 
-
+        /// Verifies that the target of the call is this account
+        ///
+        /// As we need to allow user with a valid ZK proof to use the entry points Deploy or Login while they
+        /// are impersonating us, we have to block them to call Deploy/Login functions of another contracts.
         fn only_self_call(self: @ContractState, call: Call) {
-            //this is to avoid to call login/deploy functions that are in other contracts that is not this one.
             let target_address: ContractAddress = call.to;
             assert(target_address == get_contract_address(), LoginErrors::OUTSIDE_CALL);
-            //println!("only_self [OK]");
         }
 
+        /// Verifies that ZK proof for the Deploy/Login transaction is valid.
+        ///
+        /// It has to verify:
+        /// - The proof is not expired.
+        /// - The proof is signed by a valid OAuth provider.
+        /// - The ZK proof itself is valid.
+        /// - The newly generated public key is part of the proof.
+        /// The validation fails if the user has a previous debt.
         fn validate_login_deploy_call(self: @ContractState, call:Call) {
             let signature = self.get_serialized_signature();
 
@@ -301,6 +356,8 @@ pub mod Login {
 //            println!("Ready to deploy/login at: {:?}", target_address);
         }
 
+        /// Verifies that the user is trying to access to the allowed entry points.
+        //TODO: Ver si se puede remover eso ya que solo hay 2 entrypoints
         fn is_user_entrypoint(self:@ContractState, selector: felt252) -> bool {
             let mut is_contained: bool = false;
             for entry_point in USER_ENDPOINTS.span() {
@@ -311,6 +368,7 @@ pub mod Login {
             return is_contained;
         }
 
+        /// Serializes the Deploy/Login signature.
         fn get_serialized_signature(self:@ContractState) -> Signature {
             let tx = get_tx_info().unbox();
             let mut signer = tx.signature;
@@ -320,10 +378,12 @@ pub mod Login {
             return signature;
         }
 
+        /// Verifies that the given modulus_F is the same as the stored one.
         fn validate_oauth_modulus_F(self: @ContractState, modulus_f: u256) {
             assert(self.oauth_modulus_F.read() == modulus_f, LoginErrors::INVALID_OAUTH_SIGNATURE);
         }
 
+        /// Computed the final account_address for the given address_seed
         fn get_target_address(self: @ContractState, address_seed: u256) -> ContractAddress {
             let login_address = get_contract_address();
             let account_class = self.sumo_account_class_hash.read();

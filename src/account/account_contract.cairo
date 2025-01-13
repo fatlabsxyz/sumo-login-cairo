@@ -46,16 +46,19 @@ pub mod Account {
 
     #[abi(embed_v0)]
     impl AccountImpl of super::IAccount<ContractState> {
+
+        /// Verifies that the given signature is valid for the given hash and the secret key paired whit
+        /// the public key of this account.
         fn is_valid_signature(
             self: @ContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252 {
             let public_key = self.public_key.read();
             if check_ecdsa_signature(msg_hash, public_key, *signature.at(0_u32), *signature.at(1_u32)) {
                 VALIDATED
-            } else {
-                0
-            }
+            } else { 0 }
         }
 
+        /// Verifies the validity of the signature for the current transaction.
+        /// This function is used by the protocol to verify `invoke` transactions.
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             self.only_protocol();
             self.validate_block_time();
@@ -63,6 +66,11 @@ pub mod Account {
             VALIDATED
         }
 
+        /// Executes a list of calls from the account.
+        ///
+        /// - The transaction version must be greater than or equal to 1.
+        /// - The function ins only accesible by the protocol.
+        /// - The fuctions first tries to pay its debts and then proceeds to execute the calls.
         fn __execute__(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
             self.only_protocol();
             self.validate_tx_version();
@@ -70,6 +78,11 @@ pub mod Account {
             execute_calls(calls)
         }
 
+        /// Changes the public key and the expiration of this account public key.
+        ///
+        /// It can be called by:
+        /// - This account if the owner has posetion of the private key.
+        /// - The sumo Login account after the user verifies the ZK proof.
         fn change_pkey(ref self: ContractState, new_key: felt252, expiration_block: felt252) {
             let caller = get_caller_address();
             if (caller == get_contract_address()) | (caller == self.deployer_address.read()) {
@@ -80,6 +93,10 @@ pub mod Account {
             }
         }
 
+        /// Pays the debt (if exists) to the sumo Login account.
+        ///
+        /// The pay is made by a "transfer" transaction to the Login account of the erc20 STRK_ADDRESS
+        /// If this account cannot pay its debt it cannot execute another transaction.
         fn pay(ref self: ContractState) {
             let caller = get_caller_address();
             if caller != self.deployer_address.read() {  assert(false, AccountErrors::INVALID_DEPLOYER) }
@@ -104,17 +121,20 @@ pub mod Account {
 
     #[generate_trait]
     pub impl PrivateImpl of IPrivate {
+        ///Verifies that the caller address is zero. i.e. the caller is the protocol.
         fn only_protocol(self: @ContractState) {
               let sender = get_caller_address();
               assert(sender.is_zero(), AccountErrors::INVALID_CALLER);
         }
 
+        /// Verifies that the transaction version is at least 1.
         fn validate_tx_version(self: @ContractState) {
             let tx_info = get_tx_info().unbox();
             let tx_version: u256 = tx_info.version.into();
             assert(tx_version >= 1_u256, AccountErrors::INVALID_TX_VERSION);
         }
 
+        /// Verifies that the incoming transaction is signed by the private key of this account.
         fn validate_tx_signature(self: @ContractState){
             let tx_info = get_tx_info().unbox();
             let signature = tx_info.signature;
@@ -122,6 +142,7 @@ pub mod Account {
             assert(self.is_valid_signature(tx_hash, signature.into()) == VALIDATED, AccountErrors::INVALID_SIGNATURE);
         }
 
+        /// Verifies that the current block time is less that the block time of expiration set by the owner
         fn validate_block_time(self: @ContractState) {
             let max_block = self.expiration_block.read();
             if max_block != 0 {
@@ -130,6 +151,7 @@ pub mod Account {
             }
         }
 
+        /// Calls for Login account to start the process of debt cancellation.
         fn call_for_collect(self: @ContractState) {
             syscalls::call_contract_syscall(
                self.deployer_address.read(),
@@ -138,6 +160,7 @@ pub mod Account {
             ).unwrap_syscall();
         }
 
+        /// Ask for the current debt of this account to the Login account.
         fn get_my_debt(ref self: ContractState) -> u128 {
             let to = self.deployer_address.read();
             let res = syscalls::call_contract_syscall(
