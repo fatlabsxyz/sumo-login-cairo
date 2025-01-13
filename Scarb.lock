@@ -11,6 +11,10 @@ version = "0.1.0"
 source = "git+https://github.com/keep-starknet-strange/garaga.git?tag=v0.13.3#c80fb9bd79cdc497ef34faa6e2a620fb678e7dac"
 
 [[package]]
+name = "oracle"
+version = "0.1.0"
+
+[[package]]
 name = "snforge_scarb_plugin"
 version = "0.31.0"
 source = "git+https://github.com/foundry-rs/starknet-foundry.git?tag=v0.31.0#72ea785ca354e9e506de3e5d687da9fb2c1b3c67"
@@ -29,6 +33,7 @@ version = "0.1.0"
 dependencies = [
  "erc20",
  "garaga",
+ "oracle",
  "snforge_std",
  "universal_ecip",
 ]

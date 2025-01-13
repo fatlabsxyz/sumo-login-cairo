@@ -2,8 +2,7 @@ use crate::utils::structs::{Signature, StructForHash, StructForHashImpl};
 use core::sha256::compute_sha256_byte_array;
 use core::starknet::{ContractAddress};
 use core::starknet::{syscalls,SyscallResultTrait};
-use crate::utils::constants::{STRK_ADDRESS, MASK_250};
-use crate::utils::errors::AccountErrors;
+use crate::utils::constants::{STRK_ADDRESS, MASK_250, ORACLE_ADDRESS};
 
 
 pub fn validate_all_inputs_hash(signature : @Signature, all_inputs_hash: Span<u256>) -> bool {
@@ -76,4 +75,16 @@ pub fn user_can_repay(user_addres: ContractAddress, debt: u128) -> bool {
 
     if balance < 2*debt.into() { return false ;} 
     return true;
+}
+
+pub fn oracle_check()  -> u256 {
+    let response = syscalls::call_contract_syscall(
+        ORACLE_ADDRESS.try_into().unwrap(),
+        selector!("get_modulus_F"),
+        array![].span(),
+    ) .unwrap_syscall();
+    let low: u128 = (*response[0]).try_into().unwrap();
+    let high: u128 = (*response[1]).try_into().unwrap();
+    let modulus_F= u256{ low , high }; 
+    return modulus_F;
 }

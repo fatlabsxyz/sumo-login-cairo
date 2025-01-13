@@ -38,8 +38,8 @@ pub mod Login {
 //    use core::starknet::TxInfo;
     use core::num::traits::Zero;
     use crate::utils::errors::{LoginErrors};
-    use crate::utils::utils::{validate_all_inputs_hash, mask_address_seed, precompute_account_address};
-    use crate::utils::constants::{MODULUS_F, TWO_POWER_128, LOGIN_FEE, DEPLOY_FEE, GARAGA_VERIFY_CLASSHASH };
+    use crate::utils::utils::{validate_all_inputs_hash, mask_address_seed, precompute_account_address, oracle_check};
+    use crate::utils::constants::{TWO_POWER_128, LOGIN_FEE, DEPLOY_FEE, GARAGA_VERIFY_CLASSHASH };
 
     const USER_ENDPOINTS : [felt252;2] = [selector!("deploy"), selector!("login")];
 
@@ -56,7 +56,7 @@ pub mod Login {
     fn constructor(ref self: ContractState, sumo_account_class_hash: felt252, public_key: felt252) {
         self.public_key.write(public_key);
         self.sumo_account_class_hash.write(sumo_account_class_hash);
-        self.oauth_modulus_F.write(MODULUS_F);
+        self.update_oauth_public_key();
     }
 
     #[abi(embed_v0)]
@@ -193,7 +193,7 @@ pub mod Login {
 
         fn  update_oauth_public_key(ref self: ContractState) {
             let old_key = self.oauth_modulus_F.read();
-            let new_key = self.oracle_check();
+            let new_key = oracle_check();
             if old_key != new_key {
                 self.oauth_modulus_F.write(new_key)
             }
@@ -269,14 +269,6 @@ pub mod Login {
             return res;
         }
 
-        fn oracle_check(self: @ContractState)  -> u256 {
-//            core::starknet::syscalls::call_contract_syscall(
-//                ORACLE_ADDRESS.try_into().unwrap(), selector!("get"), ArrayTrait::new().span()
-//            )
-//                .unwrap_syscall();
-            let key:u256 = 123456_256;
-            return key;
-        }
 
         fn only_self_call(self: @ContractState, call: Call) {
             //this is to avoid to call login/deploy functions that are in other contracts that is not this one.
