@@ -1,8 +1,10 @@
 use crate::utils::structs::{Signature, StructForHash, StructForHashImpl};
 use core::sha256::compute_sha256_byte_array;
 use core::starknet::{ContractAddress};
+use core::starknet::{syscalls,SyscallResultTrait};
+use crate::utils::constants::{STRK_ADDRESS, MASK_250};
+use crate::utils::errors::AccountErrors;
 
-const MASK_250: u256 = 1809251394333065553493296640760748560207343510400633813116524750123642650623;
 
 pub fn validate_all_inputs_hash(signature : @Signature, all_inputs_hash: Span<u256>) -> bool {
     let (eph_0, eph_1) = *signature.eph_key;
@@ -59,3 +61,19 @@ pub fn precompute_account_address( deployer_address: ContractAddress, class_hash
         let hash = struct_to_hash.hash();
         hash.try_into().unwrap()
     }
+
+
+pub fn user_can_repay(user_addres: ContractAddress, debt: u128) -> bool {
+    let response = syscalls::call_contract_syscall(
+       STRK_ADDRESS.try_into().unwrap(),
+       selector!("balance_of"),
+       array![user_addres.into()].span(),
+    ).unwrap_syscall();
+
+    let low: u128 = (*response[0]).try_into().unwrap();
+    let high: u128 = (*response[1]).try_into().unwrap();
+    let balance = u256{ low , high }; 
+
+    if balance < 2*debt.into() { return false ;} 
+    return true;
+}

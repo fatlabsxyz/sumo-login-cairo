@@ -25,6 +25,7 @@ pub mod Account {
     use crate::utils::execute::execute_calls;
     use crate::utils::errors::AccountErrors;
     use crate::utils::constants::STRK_ADDRESS;
+    use crate::utils::utils::user_can_repay;
 
     #[storage]
     struct Storage {
@@ -82,16 +83,16 @@ pub mod Account {
         fn pay(ref self: ContractState) {
             let caller = get_caller_address();
             if caller != self.deployer_address.read() {  assert(false, AccountErrors::INVALID_DEPLOYER) }
+            let debt: u128 = self.get_my_debt();
 
-            let debt: u256 = self.get_my_debt();
-            let balance  = self.get_my_balance();
+            if !user_can_repay(get_contract_address(), debt) { assert(false, AccountErrors::NOT_ENOGHT_MONEY) } 
 
-            if balance < 2*debt { assert(false, AccountErrors::NOT_ENOGHT_MONEY) } 
+            let amount : u256 = debt.into();
 
             let calldata = array![
                 caller.into(),
-                debt.low.into(),
-                debt.high.into(),];
+                amount.low.into(),
+                amount.high.into(),];
             syscalls::call_contract_syscall(
                STRK_ADDRESS.try_into().unwrap(),
                selector!("transfer"),
@@ -137,29 +138,15 @@ pub mod Account {
             ).unwrap_syscall();
         }
 
-        fn get_my_debt(ref self: ContractState) -> u256 {
+        fn get_my_debt(ref self: ContractState) -> u128 {
             let to = self.deployer_address.read();
             let res = syscalls::call_contract_syscall(
                to,
                selector!("get_user_debt"),
                array![get_contract_address().into()].span()
             ).unwrap_syscall();
-            let amount: u128 = (*res.at(0)).try_into().unwrap();
-            let debt: u256 = amount.into();
+            let debt: u128 = (*res.at(0)).try_into().unwrap();
             return debt;
-        }
-
-        fn get_my_balance(self: @ContractState) -> u256 {
-            let response = syscalls::call_contract_syscall(
-               STRK_ADDRESS.try_into().unwrap(),
-               selector!("balance_of"),
-               array![get_contract_address().into()].span(),
-            ).unwrap_syscall();
-
-            let low: u128 = (*response[0]).try_into().unwrap();
-            let high: u128 = (*response[1]).try_into().unwrap();
-            let amount = u256{ low , high }; 
-            return amount;
         }
     }
 }
