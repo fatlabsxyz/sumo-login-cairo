@@ -34,6 +34,24 @@ pub mod Account {
         expiration_block: u64,
     }
 
+    #[event]
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub enum Event {
+        PKeyChanged: PKeyChanged,
+        DebtPayed: DebtPayed,
+    }
+
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub struct PKeyChanged {
+        pub new_key: felt252,
+    }
+
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub struct DebtPayed{
+        pub ammount: u128,
+        pub to: ContractAddress,
+    }
+
     #[constructor]
     fn constructor(ref self: ContractState) {
         //Might be the universal deployer address if deploy is made with a DEPLOY_ACCOUNT transaction
@@ -83,11 +101,14 @@ pub mod Account {
         /// It can be called by:
         /// - This account if the owner has posetion of the private key.
         /// - The sumo Login account after the user verifies the ZK proof.
+        ///
+        /// Emits PkeyChanged event.
         fn change_pkey(ref self: ContractState, new_key: felt252, expiration_block: felt252) {
             let caller = get_caller_address();
             if (caller == get_contract_address()) | (caller == self.deployer_address.read()) {
                 self.public_key.write(new_key);
                 self.expiration_block.write(expiration_block.try_into().unwrap());
+                self.emit( PKeyChanged {new_key : new_key })
             } else {
                 assert(false, AccountErrors::NOT_ALLOWED);
             }
@@ -97,6 +118,8 @@ pub mod Account {
         ///
         /// The pay is made by a "transfer" transaction to the Login account of the erc20 STRK_ADDRESS
         /// If this account cannot pay its debt it cannot execute another transaction.
+        ///
+        /// Emits DebtPayed event.
         fn pay(ref self: ContractState) {
             let caller = get_caller_address();
             if caller != self.deployer_address.read() {  assert(false, AccountErrors::INVALID_DEPLOYER) }
@@ -116,6 +139,8 @@ pub mod Account {
                calldata.span()
             ).unwrap_syscall();
             //TODO: return payed_amount. This way Login Contract can store how much of the debt was payed.
+
+            self.emit( DebtPayed { to : caller , ammount : debt })
         }
     }
 

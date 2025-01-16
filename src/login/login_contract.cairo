@@ -52,6 +52,36 @@ pub mod Login {
         oauth_modulus_F: u256,
     }
 
+    #[event]
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub enum Event {
+        DeployAccount: DeployAccount,
+        LoginAccount: LoginAccount,
+        ModulusUptdated: ModulusUptdated,
+        DebtCollected: DebtCollected
+    }
+
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub struct DeployAccount {
+        pub address: ContractAddress,
+    }
+
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub struct LoginAccount {
+        pub address: ContractAddress,
+    }
+
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub struct ModulusUptdated{
+        pub modulus: u256,
+    }
+
+    #[derive(Drop, PartialEq, starknet::Event)]
+    pub struct DebtCollected {
+        pub address: ContractAddress,
+        pub ammount: u128
+    }
+
     #[constructor]
     /// Initializes this contract.
     ///
@@ -130,6 +160,8 @@ pub mod Login {
         /// This function can olny be reach by an usser with a valid ZK proof with a previous debt free sumo 
         /// Account. The function changes user's public key (and expiration time) to the new one given
         /// in the transaction.
+        ///
+        /// Emits LoginAccount event
         fn login(ref self:ContractState) {
             //to reach this function the user has to have no debt. Otherwise it is rejected in the 
             //validate. We cannot check in the validate if he has a way to pay for the login in the validate.
@@ -144,6 +176,7 @@ pub mod Login {
 
             self.set_user_pkey(user_address, reconstructed_eph_key, expiration_block);
             self.add_debt(user_address,LOGIN_FEE);
+            self.emit(LoginAccount { address : user_address });
             //TODO: que hacer con esto? si ponemos el collect la transaccion puede tirar error por saldo insuficiente
             // pero al usuario se le cambio la pkey
             //self.collect_debt(user_address);
@@ -153,6 +186,7 @@ pub mod Login {
         ///
         /// This function can olny be reach by an usser with a valid ZK proof without a previous sumo Account.
         /// After deploy, sets the public key (and expiration time) to given in the transaction.
+        /// Emits DeployAccount event
         fn deploy(ref self: ContractState) -> ContractAddress {
 //            println!("Entering deploy");
             let signature = self.get_serialized_signature();
@@ -173,6 +207,7 @@ pub mod Login {
             self.set_user_pkey(address, reconstructed_eph_key ,expiration_block);
             self.add_debt(address,DEPLOY_FEE);
 //            println!("Deployed address {:?}", address);
+            self.emit(DeployAccount { address : address });
             address
         }
 
@@ -200,6 +235,8 @@ pub mod Login {
         /// - The owner the given account, each time it tries to execute a transaction.
         ///   This enforces that the account will pay its debt as soon as posible.
         /// - The owner of this sumo Login account. 
+        ///
+        /// Emits DebtCollected event
         fn collect_debt(ref self: ContractState, user_address:  ContractAddress) {
             let caller = get_caller_address();
             if ( caller != get_contract_address()) && (caller != user_address) {
@@ -220,13 +257,17 @@ pub mod Login {
             ).unwrap_syscall();
 
             self.user_debt.entry(user_address).write(0);
+            self.emit( DebtCollected { address : user_address , ammount : debt})
         }
 
         /// Updates the stored public key of the OAuth provider.
+        ///
+        /// Emits LoginAccount event
         fn  update_oauth_public_key(ref self: ContractState) {
             let old_key = self.oauth_modulus_F.read();
             let new_key = oracle_check();
             if old_key != new_key {
+                self.emit( ModulusUptdated { modulus : new_key });
                 self.oauth_modulus_F.write(new_key)
             }
         }

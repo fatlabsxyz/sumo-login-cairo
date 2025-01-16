@@ -1,3 +1,0 @@
--En el validate hay que iterar sobre todas las calls y valdiar una por una, de lo contrario te pueden romper el orto.
-
--El struct BlockInfo tiene adentro en block_number, y ademas un timestamp, tal vez es mejor validar el blocktime por timestamp en lugar de por numero de bloque
