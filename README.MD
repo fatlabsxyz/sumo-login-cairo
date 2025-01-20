@@ -17,7 +17,7 @@ This contract is responsible for:
 
 - Login: When users with a previously deployed SUMO Account wants to use their account and they do not have the ephemeral key (maybe because they are trying to use a the account in a diferent device), they can provide a new JWT with a new ephemeral key pair. The Login contract verifies then that the data is correct and changes the key of the users account to the new one. The user can now use the ephemeral key pair to sign-verify its transactions.
 
-To keep private the content of the JWT. The users do not provide the raw JWT but a zk poof that guarantees that they are in posetion of the JWT. This is the main feature of SUMO.  **ADD BLOAT**
+To keep private the content of the JWT. The users do not provide the raw JWT but a zk poof that guarantees that they are in posetion of the JWT. This is the main feature of SUMO.
 
 ### The SUMO Account contract.
 Once deployed, this account functions in a similar way to a regular account. The user can make transactions that are signed with the ephemeral private key. The ephemeral key has a expiration block that can be set by the user on deploy/login.
