@@ -10,18 +10,17 @@ trait IGroth16VerifierBN254<TContractState> {
 
 #[starknet::contract]
 mod Groth16VerifierBN254 {
-    use starknet::SyscallResultTrait;
-    use garaga::definitions::{G1Point, G1G2Pair};
-    use garaga::groth16::{multi_pairing_check_bn254_3P_2F_with_extra_miller_loop_result};
-    use garaga::ec_ops::{G1PointTrait, G2PointTrait, ec_safe_add};
-    use garaga::utils::calldata::{deserialize_full_proof_with_hints_bn254};
-    use super::{N_PUBLIC_INPUTS, vk, ic, precomputed_lines};
+    use starknet::{ SyscallResultTrait , ContractAddress };
+    use garaga::definitions::{ G1Point , G1G2Pair };
+    use garaga::groth16::{ multi_pairing_check_bn254_3P_2F_with_extra_miller_loop_result };
+    use garaga::ec_ops::{ G1PointTrait , G2PointTrait , ec_safe_add };
+    use garaga::utils::calldata::{ deserialize_full_proof_with_hints_bn254 };
+    use super::{ N_PUBLIC_INPUTS, vk, ic, precomputed_lines };
    //use super::Groth16Proof;
 
     const ECIP_OPS_CLASS_HASH: felt252 =
         0x04ca4fb1385c242094baf5d182d3f21b1123c22395e5e7f5c74514faa2df8bb8;
 //        0x7918f484291eb154e13d0e43ba6403e62dc1f5fbb3a191d868e2e37359f8713;
-    use starknet::ContractAddress;
 
     #[storage]
     struct Storage {}

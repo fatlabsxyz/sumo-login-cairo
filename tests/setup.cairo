@@ -1,13 +1,19 @@
-use sumo::login::login_contract::ILoginDispatcher;
-use core::starknet::{ContractAddress};
-use sumo::utils::constants::{STRK_ADDRESS, ORACLE_ADDRESS};
+use sumo::login::login_contract::{ ILoginDispatcher };
+use sumo::utils::constants::{ STRK_ADDRESS , ORACLE_ADDRESS };
 
+use core::starknet::{
+    ContractAddress,
+    syscalls,
+    SyscallResultTrait,
+};
 
 use snforge_std::{
     declare,
     ContractClassTrait,
     DeclareResultTrait,
     ContractClass,
+    stop_cheat_caller_address,
+    start_cheat_caller_address,
 };
 
 
@@ -45,6 +51,33 @@ fn setup_erc20() {
 fn setup_verifier() {
     let _ = declare_class("UniversalECIP");
     let _ = declare_class("Groth16VerifierBN254");
+}
+
+pub fn balance_of(address: ContractAddress) -> u256 {
+    let balance = syscalls::call_contract_syscall(
+               STRK_ADDRESS.try_into().unwrap(),
+               selector!("balance_of"),
+               array![address.into()].span()
+            ).unwrap_syscall();
+    let low: u128 = (*balance[0]).try_into().unwrap();
+    let high: u128 = (*balance[1]).try_into().unwrap();
+    let amount = u256{ low , high }; 
+    return amount; 
+}
+
+pub fn transfer(from: ContractAddress, to:ContractAddress, amount: u256) {
+    start_cheat_caller_address(STRK_ADDRESS.try_into().unwrap(), from);
+    let recipient: felt252 = to.try_into().unwrap();
+    let low: felt252 = amount.low.try_into().unwrap();
+    let high: felt252 = amount.high.try_into().unwrap();
+    let calldata: Array<felt252> = array![recipient,low,high];
+
+    let _ = syscalls::call_contract_syscall(
+               STRK_ADDRESS.try_into().unwrap(),
+               selector!("transfer"),
+               calldata.span(),
+            ).unwrap_syscall();
+    stop_cheat_caller_address(STRK_ADDRESS.try_into().unwrap());
 }
 
 pub fn setup_login() -> (ContractAddress,ILoginDispatcher) {

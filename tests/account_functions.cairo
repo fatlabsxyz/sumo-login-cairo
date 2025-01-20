@@ -5,50 +5,26 @@
 //  pay (tested)
 //  change_pkey (tested)
 
-use core::starknet::account::Call;
-use crate::setup::{setup_login};
+
+use crate::setup::{ setup_login , transfer };
+use sumo::login::login_contract::{ ILoginDispatcherTrait };
+use sumo::account::account_contract::{ IAccountDispatcher , IAccountDispatcherTrait };
 use crate::signatures::garaga_signature::{signature};
-use crate::signatures::user_signatures::{correct_user_signature, incorrect_user_signature};
-use core::starknet::{ContractAddress};
-use starknet::{contract_address_const};
-use snforge_std::{start_cheat_signature,start_cheat_caller_address, stop_cheat_caller_address};
-use core::starknet::{syscalls,SyscallResultTrait};
-use sumo::login::login_contract::ILoginDispatcherTrait;
-use sumo::account::account_contract::IAccountDispatcher;
-use sumo::account::account_contract::IAccountDispatcherTrait;
-use sumo::utils::constants::{STRK_ADDRESS};
-use snforge_std::start_cheat_block_number;
-use snforge_std::{start_cheat_transaction_hash};
+use crate::signatures::user_signatures::{ correct_user_signature, incorrect_user_signature };
+use core::starknet::{
+    ContractAddress,
+    contract_address_const,
+    account::Call
+};
+use snforge_std::{
+    start_cheat_signature,
+    start_cheat_caller_address,
+    start_cheat_block_number,
+    start_cheat_transaction_hash,
+};
 
 
-const INITIAL_BALANCE : u256 = 1_000_000_000_u256;
 
-fn balance_of(address: ContractAddress) -> u256 {
-    let balance = syscalls::call_contract_syscall(
-               STRK_ADDRESS.try_into().unwrap(),
-               selector!("balance_of"),
-               array![address.into()].span()
-            ).unwrap_syscall();
-    let low: u128 = (*balance[0]).try_into().unwrap();
-    let high: u128 = (*balance[1]).try_into().unwrap();
-    let amount = u256{ low , high }; 
-    return amount; 
-}
-
-fn transfer(from: ContractAddress, to:ContractAddress, amount: u256) {
-    start_cheat_caller_address(STRK_ADDRESS.try_into().unwrap(), from);
-    let recipient: felt252 = to.try_into().unwrap();
-    let low: felt252 = amount.low.try_into().unwrap();
-    let high: felt252 = amount.high.try_into().unwrap();
-    let calldata: Array<felt252> = array![recipient,low,high];
-
-    let _ = syscalls::call_contract_syscall(
-               STRK_ADDRESS.try_into().unwrap(),
-               selector!("transfer"),
-               calldata.span(),
-            ).unwrap_syscall();
-    stop_cheat_caller_address(STRK_ADDRESS.try_into().unwrap());
-}
 
 // --------------------------- TEST FOR PAY FUNCTION ------------------------------------------------
 #[test]

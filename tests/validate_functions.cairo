@@ -1,20 +1,28 @@
 //These test pretend  to test all the functionalities of the __validate__ functions of the Login account.
 //the mock signature is un tests/signature.cairo.
 
-use crate::setup::{setup_login};
-use crate::signatures::garaga_signature::{signature};
-use crate::signatures::admin_signatures::{correct_admin_signature, incorrect_admin_signature, incorrect_signature_type};
-use core::starknet::account::Call;
-use sumo::login::login_contract::ILoginDispatcher;
-use sumo::login::login_contract::ILoginDispatcherTrait;
-use starknet::{contract_address_const};
-use core::starknet::{ContractAddress};
+use crate::setup::{ setup_login };
+use sumo::login::login_contract::{ ILoginDispatcher , ILoginDispatcherTrait };
+use crate::signatures::garaga_signature::{ signature };
+use crate::signatures::admin_signatures::{
+    correct_admin_signature,
+    incorrect_admin_signature,
+    incorrect_signature_type
+};
 
-use snforge_std::{start_cheat_signature, start_cheat_caller_address, };
-use snforge_std::start_cheat_block_number;
-use snforge_std::{start_cheat_transaction_hash, start_cheat_transaction_version_global};
+use core::starknet::{
+    ContractAddress,
+    contract_address_const,
+    account::Call
+};
 
-//const LOGIN_ADDRESS: felt252 = 0x75662cc8b986d55d709d58f698bbb47090e2474918343b010192f487e30c23f;
+use snforge_std::{
+    start_cheat_signature,
+    start_cheat_caller_address,
+    start_cheat_block_number,
+    start_cheat_transaction_hash,
+    start_cheat_transaction_version_global,
+};
 
 #[derive(Serde, Drop, Debug)]
 struct Signature {

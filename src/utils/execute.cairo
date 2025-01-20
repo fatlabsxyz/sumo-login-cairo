@@ -1,4 +1,4 @@
-use core::starknet::{syscalls,SyscallResultTrait};
+use core::starknet::{ syscalls , SyscallResultTrait };
 use core::starknet::account::Call;
 
 pub fn execute_calls(mut calls: Span<Call>) -> Array<Span<felt252>> {

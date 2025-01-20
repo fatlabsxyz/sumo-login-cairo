@@ -1,5 +1,4 @@
-use core::starknet::{ContractAddress};
-use core::starknet::account::Call;
+use core::starknet::{ ContractAddress , account::Call };
 
 #[starknet::interface]
 pub trait ILogin<TContractState> {
@@ -20,26 +19,34 @@ pub trait ILogin<TContractState> {
 
 #[starknet::contract(account)]
 pub mod Login {
-    use crate::utils::structs::{StructForHashImpl, PublicInputImpl};
-    use crate::utils::structs::{Signature};
-    use crate::utils::execute::execute_calls;
-    use core::starknet::storage::{StoragePointerReadAccess,
-        StoragePointerWriteAccess,
-        StoragePathEntry,
-        Map
-        };
-    use core::ecdsa::check_ecdsa_signature;
-    use core::starknet::{syscalls,SyscallResultTrait};
-    use core::starknet::{ContractAddress};
-    use core::starknet::class_hash::{ClassHash};
-    use core::starknet::VALIDATED;
-    use core::starknet::account::Call;
-    use core::starknet::{get_caller_address, get_tx_info, get_block_number, get_contract_address};
-//    use core::starknet::TxInfo;
-    use core::num::traits::Zero;
-    use crate::utils::errors::{LoginErrors};
-    use crate::utils::utils::{validate_all_inputs_hash, mask_address_seed, precompute_account_address, oracle_check};
-    use crate::utils::constants::{TWO_POWER_128, LOGIN_FEE, DEPLOY_FEE, GARAGA_VERIFY_CLASSHASH };
+    use core::starknet::{
+        syscalls,
+        SyscallResultTrait,
+        ContractAddress,
+        ClassHash,
+        VALIDATED,
+        get_tx_info,
+        get_block_number,
+        get_caller_address,
+        get_contract_address,
+        account::Call,
+        storage::StoragePointerReadAccess,
+        storage::StoragePointerWriteAccess,
+        storage::StoragePathEntry,
+        storage::Map
+    };
+    use crate::utils::utils::{
+        validate_all_inputs_hash,
+        mask_address_seed,
+        precompute_account_address,
+        oracle_check
+    };
+
+    use core::ecdsa::{ check_ecdsa_signature };
+    use core::num::traits::{ Zero };
+    use crate::utils::constants::{ TWO_POWER_128 , LOGIN_FEE, DEPLOY_FEE , GARAGA_VERIFY_CLASSHASH };
+    use crate::utils::structs::{ StructForHashImpl , PublicInputImpl , Signature };
+    use crate::utils::{ errors::LoginErrors , execute::execute_calls };
 
     const USER_ENDPOINTS : [felt252;2] = [selector!("deploy"), selector!("login")];
 

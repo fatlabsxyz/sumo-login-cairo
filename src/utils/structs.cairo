@@ -1,6 +1,6 @@
-use core::pedersen::PedersenTrait;
-use core::hash::{HashStateTrait, HashStateExTrait};
-use core::sha256::compute_sha256_byte_array;
+use core::hash::{ HashStateTrait , HashStateExTrait };
+use core::pedersen::{ PedersenTrait };
+use core::sha256::{ compute_sha256_byte_array };
 
 #[derive(Drop, Hash, Serde, Copy)]
 pub struct StructForHash {

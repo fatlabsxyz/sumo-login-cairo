@@ -1,8 +1,7 @@
-use crate::utils::structs::{Signature, StructForHash, StructForHashImpl};
-use core::sha256::compute_sha256_byte_array;
-use core::starknet::{ContractAddress};
-use core::starknet::{syscalls,SyscallResultTrait};
-use crate::utils::constants::{STRK_ADDRESS, MASK_250, ORACLE_ADDRESS};
+use core::sha256::{ compute_sha256_byte_array };
+use core::starknet::{ syscalls , SyscallResultTrait , ContractAddress };
+use crate::utils::structs::{ Signature, StructForHash, StructForHashImpl };
+use crate::utils::constants::{ STRK_ADDRESS, MASK_250, ORACLE_ADDRESS };
 
 
 /// Verifies that the sha256 hash of the public inputs given in the signature is equal to the

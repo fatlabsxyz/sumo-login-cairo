@@ -1,31 +1,31 @@
-use crate::signatures::garaga_signature::{signature};
-use crate::signatures::admin_signatures::correct_admin_signature;
-use sumo::login::login_contract::ILoginDispatcherTrait;
-use sumo::account::account_contract::IAccountDispatcher;
-use core::starknet::{syscalls,SyscallResultTrait};
-use snforge_std::{start_cheat_signature,start_cheat_caller_address, stop_cheat_caller_address};
-use sumo::login::login_contract::Login::{Event as LoginEvents, DeployAccount, DebtCollected,LoginAccount,ModulusUptdated};
-use sumo::account::account_contract::Account::{Event as AccountEvents, DebtPayed, PKeyChanged};
-use snforge_std::{spy_events, EventSpyAssertionsTrait};
-use crate::setup::{setup_login};
-use core::starknet::{ContractAddress};
-use sumo::utils::constants::{STRK_ADDRESS};
 
+use crate::setup::{ setup_login , transfer };
+use sumo::login::login_contract::{ ILoginDispatcherTrait };
+use sumo::account::account_contract::{ IAccountDispatcher };
+use crate::signatures::garaga_signature::{ signature };
+use core::starknet::{ ContractAddress };
 
-fn transfer(from: ContractAddress, to:ContractAddress, amount: u256) {
-    start_cheat_caller_address(STRK_ADDRESS.try_into().unwrap(), from);
-    let recipient: felt252 = to.try_into().unwrap();
-    let low: felt252 = amount.low.try_into().unwrap();
-    let high: felt252 = amount.high.try_into().unwrap();
-    let calldata: Array<felt252> = array![recipient,low,high];
+use snforge_std::{
+    start_cheat_signature,
+    start_cheat_caller_address,
+    spy_events,
+    EventSpyAssertionsTrait,
+};
 
-    let _ = syscalls::call_contract_syscall(
-               STRK_ADDRESS.try_into().unwrap(),
-               selector!("transfer"),
-               calldata.span(),
-            ).unwrap_syscall();
-    stop_cheat_caller_address(STRK_ADDRESS.try_into().unwrap());
-}
+use sumo::login::login_contract::Login::{
+    Event as LoginEvents,
+    DeployAccount,
+    DebtCollected,
+    LoginAccount,
+    ModulusUptdated
+};
+
+use sumo::account::account_contract::Account::{
+    Event as AccountEvents,
+    DebtPayed,
+    PKeyChanged
+};
+
 
 #[test]
 fn deploy() {
@@ -97,15 +97,9 @@ fn login() {
 
 #[test]
 fn modulus_update(){
-    let (login_address, login_dispatcher) = setup_login();
-    let signature = correct_admin_signature();
-    start_cheat_signature(login_address , signature) ;
-
     let mut spy = spy_events();
-    login_dispatcher.update_oauth_public_key();
-
+    let (login_address, _login_dispatcher) = setup_login();
     let modulus:u256 = 6472322537804972268794034248194861302128540584786330577698326766016488520183;
     let expected_login = LoginEvents::ModulusUptdated(ModulusUptdated{ modulus: modulus });
     spy.assert_emitted(@array![(login_address, expected_login)]);
-
 }

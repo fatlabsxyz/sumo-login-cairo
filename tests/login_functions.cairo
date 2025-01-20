@@ -1,41 +1,15 @@
 //These test shoul test Login fuctions not realed with the validate.
-use crate::setup::{setup_login};
-use crate::signatures::garaga_signature::{signature};
-use core::starknet::{ContractAddress};
-use snforge_std::{start_cheat_signature,start_cheat_caller_address, stop_cheat_caller_address};
-use core::starknet::{syscalls,SyscallResultTrait};
-use sumo::login::login_contract::ILoginDispatcherTrait;
-use sumo::account::account_contract::IAccountDispatcher;
-use sumo::utils::constants::{STRK_ADDRESS, DEPLOY_FEE};
+
+use crate::setup::{ setup_login , transfer , balance_of };
+use crate::signatures::garaga_signature::{ signature };
+use sumo::login::login_contract::{ ILoginDispatcherTrait } ;
+use sumo::account::account_contract::{ IAccountDispatcher };
+use sumo::utils::constants::{ DEPLOY_FEE };
+use core::starknet::{ ContractAddress };
+use snforge_std::{ start_cheat_signature , start_cheat_caller_address };
+
 
 const INITIAL_BALANCE : u256 = 1_000_000_000_u256;
-
-fn balance_of(address: ContractAddress) -> u256 {
-    let balance = syscalls::call_contract_syscall(
-               STRK_ADDRESS.try_into().unwrap(),
-               selector!("balance_of"),
-               array![address.into()].span()
-            ).unwrap_syscall();
-    let low: u128 = (*balance[0]).try_into().unwrap();
-    let high: u128 = (*balance[1]).try_into().unwrap();
-    let amount = u256{ low , high }; 
-    return amount; 
-}
-
-fn transfer(from: ContractAddress, to:ContractAddress, amount: u256) {
-    start_cheat_caller_address(STRK_ADDRESS.try_into().unwrap(), from);
-    let recipient: felt252 = to.try_into().unwrap();
-    let low: felt252 = amount.low.try_into().unwrap();
-    let high: felt252 = amount.high.try_into().unwrap();
-    let calldata: Array<felt252> = array![recipient,low,high];
-
-    let _ = syscalls::call_contract_syscall(
-               STRK_ADDRESS.try_into().unwrap(),
-               selector!("transfer"),
-               calldata.span(),
-            ).unwrap_syscall();
-    stop_cheat_caller_address(STRK_ADDRESS.try_into().unwrap());
-}
 
 
 

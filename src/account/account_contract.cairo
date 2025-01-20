@@ -14,18 +14,23 @@ pub trait IAccount<TContractState> {
 
 #[starknet::contract(account)]
 pub mod Account {
-    use core::ecdsa::check_ecdsa_signature;
-    use core::starknet::{syscalls,SyscallResultTrait};
-    use core::starknet::{ContractAddress};
-    use core::starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use core::starknet::{get_caller_address, get_tx_info, VALIDATED, get_contract_address, get_block_number};
-    use core::array::{ArrayTrait};
-    use core::num::traits::Zero;
-    use starknet::account::Call;
-    use crate::utils::execute::execute_calls;
-    use crate::utils::errors::AccountErrors;
-    use crate::utils::constants::STRK_ADDRESS;
-    use crate::utils::utils::user_can_repay;
+    use core::starknet::{
+        syscalls,
+        SyscallResultTrait,
+        ContractAddress,
+        VALIDATED,
+        get_tx_info,
+        get_block_number,
+        get_caller_address,
+        get_contract_address,
+        account::Call,
+        storage::StoragePointerReadAccess,
+        storage::StoragePointerWriteAccess,
+    };
+    use core::ecdsa::{ check_ecdsa_signature };
+    use core::num::traits::{ Zero };
+    use crate::utils::{ errors::AccountErrors , execute::execute_calls };
+    use crate::utils::{ constants::STRK_ADDRESS , utils::user_can_repay };
 
     #[storage]
     struct Storage {
