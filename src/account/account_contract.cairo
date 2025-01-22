@@ -27,10 +27,14 @@ pub mod Account {
         storage::StoragePointerReadAccess,
         storage::StoragePointerWriteAccess,
     };
-    use core::ecdsa::{ check_ecdsa_signature };
+    use crate::utils::{
+        errors::AccountErrors,
+        execute::execute_calls,
+        constants::STRK_ADDRESS,
+        utils::user_can_repay,
+    };
     use core::num::traits::{ Zero };
-    use crate::utils::{ errors::AccountErrors , execute::execute_calls };
-    use crate::utils::{ constants::STRK_ADDRESS , utils::user_can_repay };
+    use core::ecdsa::{ check_ecdsa_signature };
 
     #[storage]
     struct Storage {

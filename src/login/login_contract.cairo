@@ -42,12 +42,19 @@ pub mod Login {
         oracle_check,
         get_gas_price,
     };
-
-    use core::ecdsa::{ check_ecdsa_signature };
+    use crate::utils::{
+        execute::execute_calls,
+        errors::LoginErrors,
+        structs::StructForHashImpl,
+        structs::PublicInputImpl,
+        structs::Signature,
+        constants::TWO_POWER_128,
+        constants::LOGIN_FEE_GAS,
+        constants::DEPLOY_FEE_GAS,
+        constants::GARAGA_VERIFY_CLASSHASH,
+    };
     use core::num::traits::{ Zero };
-    use crate::utils::constants::{ TWO_POWER_128 , LOGIN_FEE_GAS, DEPLOY_FEE_GAS , GARAGA_VERIFY_CLASSHASH };
-    use crate::utils::structs::{ StructForHashImpl , PublicInputImpl , Signature };
-    use crate::utils::{ errors::LoginErrors , execute::execute_calls };
+    use core::ecdsa::{ check_ecdsa_signature };
 
     const USER_ENDPOINTS : [felt252;2] = [selector!("deploy"), selector!("login")];
 
