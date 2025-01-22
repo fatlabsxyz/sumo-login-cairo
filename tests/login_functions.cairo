@@ -4,7 +4,8 @@ use crate::setup::{ setup_login , transfer , balance_of };
 use crate::signatures::garaga_signature::{ signature };
 use sumo::login::login_contract::{ ILoginDispatcherTrait } ;
 use sumo::account::account_contract::{ IAccountDispatcher };
-use sumo::utils::constants::{ DEPLOY_FEE };
+use sumo::utils::constants::{ DEPLOY_FEE_GAS };
+use sumo::utils::utils::{ get_gas_price };
 use core::starknet::{ ContractAddress };
 use snforge_std::{ start_cheat_signature , start_cheat_caller_address };
 
@@ -31,7 +32,7 @@ fn collect_debt() {
     let _account_dispatcher = IAccountDispatcher {contract_address: account_address};
 
     let initial_debt = login_dispatcher.get_user_debt(account_address);
-    if initial_debt != DEPLOY_FEE {assert(false, 'Debt: Not Asigned') };
+    if initial_debt != DEPLOY_FEE_GAS * get_gas_price() {assert(false, 'Debt: Not Asigned') };
 
     let balance_account = balance_of(account_address);
     if balance_account != 0 { assert(false, 'Balance: Initial not zero') } 
@@ -40,7 +41,7 @@ fn collect_debt() {
 //    println!("Account Balance {:?} --- Account Debt {:?} ", balance_account, initial_debt);
 
 //    println!("Funding Account");
-    let transfer_amount: u256 = 3_000_000_u256;
+    let transfer_amount: u256 = 100_000_000_u256;
     transfer(login_address, account_address, transfer_amount);
 
     let balance_account = balance_of(account_address);

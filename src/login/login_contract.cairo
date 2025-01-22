@@ -39,12 +39,13 @@ pub mod Login {
         validate_all_inputs_hash,
         mask_address_seed,
         precompute_account_address,
-        oracle_check
+        oracle_check,
+        get_gas_price,
     };
 
     use core::ecdsa::{ check_ecdsa_signature };
     use core::num::traits::{ Zero };
-    use crate::utils::constants::{ TWO_POWER_128 , LOGIN_FEE, DEPLOY_FEE , GARAGA_VERIFY_CLASSHASH };
+    use crate::utils::constants::{ TWO_POWER_128 , LOGIN_FEE_GAS, DEPLOY_FEE_GAS , GARAGA_VERIFY_CLASSHASH };
     use crate::utils::structs::{ StructForHashImpl , PublicInputImpl , Signature };
     use crate::utils::{ errors::LoginErrors , execute::execute_calls };
 
@@ -182,7 +183,7 @@ pub mod Login {
             let user_address: ContractAddress = self.get_target_address(signature.address_seed);
 
             self.set_user_pkey(user_address, reconstructed_eph_key, expiration_block);
-            self.add_debt(user_address,LOGIN_FEE);
+            self.add_debt(user_address,LOGIN_FEE_GAS);
             self.emit(LoginAccount { address : user_address });
             //TODO: que hacer con esto? si ponemos el collect la transaccion puede tirar error por saldo insuficiente
             // pero al usuario se le cambio la pkey
@@ -212,7 +213,7 @@ pub mod Login {
             let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
             let expiration_block:u64 = signature.max_block.try_into().unwrap();
             self.set_user_pkey(address, reconstructed_eph_key ,expiration_block);
-            self.add_debt(address,DEPLOY_FEE);
+            self.add_debt(address,DEPLOY_FEE_GAS);
 //            println!("Deployed address {:?}", address);
             self.emit(DeployAccount { address : address });
             address
@@ -289,8 +290,9 @@ pub mod Login {
         /// - When updating the publick key a pre-existing user.
         /// In both of these situations the user has to provide a valid ZK proof of his/her identity.
         fn add_debt(ref self: ContractState, address: ContractAddress, value: u128) {
+            let gas_price = get_gas_price();
             let current_debt: u128 = self.user_debt.entry(address).read();
-            self.user_debt.entry(address).write(current_debt + value);
+            self.user_debt.entry(address).write(current_debt + value * gas_price);
         }
 
         ///Verifies that the caller address is zero. i.e. the caller is the protocol.
@@ -439,4 +441,5 @@ pub mod Login {
         }
     }
 }
+
 

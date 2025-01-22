@@ -52,7 +52,7 @@ fn pay_and_collect_debt() {
 
     let _account_dispatcher = IAccountDispatcher {contract_address: account_address};
 
-    let transfer_amount: u256 = 3_000_000_u256;
+    let transfer_amount: u256 = 100_000_000_u256;
     transfer(login_address, account_address, transfer_amount);
 
     let debt = login_dispatcher.get_user_debt( account_address );
@@ -78,7 +78,7 @@ fn login() {
 
     let _account_dispatcher = IAccountDispatcher {contract_address: account_address};
 
-    let transfer_amount: u256 = 3_000_000_u256;
+    let transfer_amount: u256 = 100_000_000_u256;
     transfer(login_address, account_address, transfer_amount);
 
     start_cheat_caller_address(login_address, login_address);

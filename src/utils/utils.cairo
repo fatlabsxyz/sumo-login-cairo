@@ -93,3 +93,9 @@ pub fn oracle_check()  -> u256 {
     let modulus_F= u256{ low , high }; 
     return modulus_F;
 }
+
+
+/// Call for the Oracle to get the gas price in starks
+pub fn get_gas_price() -> u128 {
+    return 1000_u128;
+}

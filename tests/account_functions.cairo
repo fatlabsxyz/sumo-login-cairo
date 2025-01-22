@@ -59,7 +59,7 @@ fn pay() {
     let account_address: ContractAddress  = login_dispatcher.deploy();
     let account_dispatcher = IAccountDispatcher {contract_address: account_address};
 
-    let transfer_amount: u256 = 3_000_000_u256;
+    let transfer_amount: u256 = 100_000_000_u256;
     transfer(login_address, account_address, transfer_amount);
 
     start_cheat_caller_address(account_address, login_address);
