@@ -4,8 +4,8 @@ use crate::utils::structs::{ Signature, StructForHash, StructForHashImpl };
 use crate::utils::constants::{ STRK_ADDRESS, MASK_250, ORACLE_ADDRESS };
 
 
-/// Verifies that the sha256 hash of the public inputs given in the signature is equal to the
-/// given one.
+/// Verifies that the sha256 hash of the public inputs in the signature equals the
+/// one contained in all_inputs_hash
 pub fn validate_all_inputs_hash(signature : @Signature, all_inputs_hash: Span<u256>) -> bool {
     let (eph_0, eph_1) = *signature.eph_key;
 
@@ -47,8 +47,7 @@ pub fn mask_address_seed(address_seed: u256 ) -> felt252 {
 }
 
 
-/// Precoputed the address that a deployed account will have given the deployer, the class_hash and the address
-/// seed.
+/// Pre-computes the deployed account's address based on a given deployer_address, class_hash and address_seed.
 pub fn precompute_account_address( deployer_address: ContractAddress, class_hash:felt252, address_seed:u256)
     -> ContractAddress {
         let salt: felt252 = mask_address_seed(address_seed);
@@ -65,12 +64,12 @@ pub fn precompute_account_address( deployer_address: ContractAddress, class_hash
     }
 
 
-/// Verifies if the given user has enought STARK to pays his/her debt.
-pub fn user_can_repay(user_addres: ContractAddress, debt: u128) -> bool {
+/// Verifies if the given user has enough STARK to pay their debt.
+pub fn user_can_repay(user_address: ContractAddress, debt: u128) -> bool {
     let response = syscalls::call_contract_syscall(
        STRK_ADDRESS.try_into().unwrap(),
        selector!("balance_of"),
-       array![user_addres.into()].span(),
+       array![user_address.into()].span(),
     ).unwrap_syscall();
 
     let low: u128 = (*response[0]).try_into().unwrap();
@@ -81,7 +80,7 @@ pub fn user_can_repay(user_addres: ContractAddress, debt: u128) -> bool {
     return true;
 }
 
-/// Calls to the mock oracle to get the new modulus_F.
+/// Calls the mock Oracle to get the new modulus_F.
 pub fn oracle_check()  -> u256 {
     let response = syscalls::call_contract_syscall(
         ORACLE_ADDRESS.try_into().unwrap(),
@@ -95,7 +94,7 @@ pub fn oracle_check()  -> u256 {
 }
 
 
-/// Call for the Oracle to get the gas price in starks
+/// Calls the Oracle to get the gas price in starks
 pub fn get_gas_price() -> u128 {
     return 1000_u128;
 }

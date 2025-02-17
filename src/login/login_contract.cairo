@@ -116,15 +116,15 @@ pub mod Login {
             VALIDATED
         }
 
-        /// Verifies that the signature of the transaction is valid.
+        /// Verifies that the transaction signature is valid.
         ///
-        /// There are two signature types that are valid. The first felt of each signature is ussed to classify them in:
-        /// - Admin signature: Is the signature associated to the owner of this account. It is the ussual ECDSA. 
-        /// - User signature: Is the signature associated to an user that pretends to deploy or login
-        ///   to his/her sumo account. It is a span of felts necesary for the validation of the ZK proof.
+        /// There are two valid signature types. The first felt of each signature is used to classify them as:
+        /// - Admin signature: The signature associated to the owner of this account. It is the usual ECDSA. 
+        /// - User signature: The signature associated to a user that intends to deploy or log into
+        ///   their sumo account. It is a span of felts necessary to validate the ZK proof.
         ///
-        /// User transactions can only call the Deploy/Login methods of this account while Admin transaction are 
-        /// normal transaction with the exception that cannot call the Deploy/Login methods of this account.
+        /// User transactions can only call the Deploy/Login methods of this account while Admin transactions are 
+        /// normal transactions, with the exception that they cannot call the Deploy/Login methods of this account.
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             self.only_protocol();
             self.validate_tx_version();
@@ -155,10 +155,10 @@ pub mod Login {
             VALIDATED
         }
 
-        /// Executes a list of calls from the account.
+        /// Executes a list of `calls` from the account.
         ///
         /// - The transaction version must be greater than or equal to 1.
-        /// - The function ins only accesible by the protocol.
+        /// - The function is only accessible by the protocol.
         fn __execute__(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
             self.only_protocol();
             self.validate_tx_version();
@@ -170,10 +170,11 @@ pub mod Login {
             self.user_list.entry(user_address).read()
         }
 
-        /// Executes the Log In of the usser
+        /// Executes the Log In of the user
         ///
-        /// This function can olny be reach by an usser with a valid ZK proof with a previous debt free sumo 
-        /// Account. The function changes user's public key (and expiration time) to the new one given
+        /// This function is only accessible by a user with a valid ZK proof and a debt free Sumo 
+        /// Account. 
+        /// This function changes the user's public key (and expiration time) to the new one given
         /// in the transaction.
         ///
         /// Emits LoginAccount event
@@ -181,7 +182,7 @@ pub mod Login {
             //to reach this function the user has to have no debt. Otherwise it is rejected in the 
             //validate. We cannot check in the validate if he has a way to pay for the login in the validate.
             //If he has a way to pay, collect_debt will succeed. If not, he will have a new debt a he will not
-            //be abble to use login if he does not pays his debt before.
+            //be able to use login if he does not pays his debt before.
             let signature = self.get_serialized_signature();
             let (eph_key_0,eph_key_1) = signature.eph_key;
             let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
@@ -227,7 +228,7 @@ pub mod Login {
         }
 
 
-        /// Verifies that the given signature is valid for the given hash and the secret key paired whit
+        /// Verifies that the given signature is valid for the given `msg_hash` and the secret key paired with
         /// the public key of this account.
         fn is_valid_signature(
             self: @ContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252 {
@@ -239,7 +240,7 @@ pub mod Login {
             }
         }
 
-        /// Recovers the debt of the given address.
+        /// Recovers the debt of a given `user_address`.
         fn get_user_debt(self: @ContractState, user_address:ContractAddress) -> u128 {
             self.user_debt.entry(user_address).read()
         }
@@ -290,19 +291,20 @@ pub mod Login {
 
     #[generate_trait]
     pub impl PrivateImpl of IPrivate {
-        /// Adds a debt to the given contract address. 
+        /// Adds debt on a given `value` to a contract `address`. 
         ///
-        /// This occurs in two ocations:
-        /// - When deploying a new account DEPLOY_FEE is added as debt to that account.
+        /// This occurs in two occasions:
+        /// - When deploying a new account, a `DEPLOY_FEE` is added as debt to that account.
         /// - When updating the publick key a pre-existing user.
-        /// In both of these situations the user has to provide a valid ZK proof of his/her identity.
+        /// In either case, the user has to provide a valid ZK proof of their identity.
         fn add_debt(ref self: ContractState, address: ContractAddress, value: u128) {
             let gas_price = get_gas_price();
             let current_debt: u128 = self.user_debt.entry(address).read();
             self.user_debt.entry(address).write(current_debt + value * gas_price);
         }
 
-        ///Verifies that the caller address is zero. i.e. the caller is the protocol.
+        /// Verifies that the caller address is zero. 
+        /// i.e. The caller is the protocol.
         fn only_protocol(self: @ContractState) {
             let sender = get_caller_address();
             assert(sender.is_zero(), LoginErrors::INVALID_CALLER);
@@ -340,7 +342,7 @@ pub mod Login {
             assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, LoginErrors::INVALID_ADMING_SIGNATURE);
         }
 
-        /// Updates the publick (and its expiration block) stored in the given account address.
+        /// Updates the given `user_address` public key, and its expiration block.
         fn set_user_pkey(self: @ContractState, user_address: ContractAddress, eph_pkey: felt252, expiration_block:u64) {
             let calldata : Array<felt252> = array![eph_pkey, expiration_block.try_into().unwrap()];
                 syscalls::call_contract_syscall(
@@ -372,10 +374,10 @@ pub mod Login {
             return res;
         }
 
-        /// Verifies that the target of the call is this account
+        /// Verifies that the call target is this account
         ///
-        /// As we need to allow user with a valid ZK proof to use the entry points Deploy or Login while they
-        /// are impersonating us, we have to block them to call Deploy/Login functions of another contracts.
+        /// Since we need to allow user with a valid ZK proof to use the entry points Deploy or Login while they
+        /// are impersonating us, we have to block them from calling Deploy/Login functions in other contracts.
         fn only_self_call(self: @ContractState, call: Call) {
             let target_address: ContractAddress = call.to;
             assert(target_address == get_contract_address(), LoginErrors::OUTSIDE_CALL);
@@ -388,7 +390,7 @@ pub mod Login {
         /// - The proof is signed by a valid OAuth provider.
         /// - The ZK proof itself is valid.
         /// - The newly generated public key is part of the proof.
-        /// The validation fails if the user has a previous debt.
+        /// Validation fails if the user is currently in debt.
         fn validate_login_deploy_call(self: @ContractState, call:Call) {
             let signature = self.get_serialized_signature();
 
@@ -413,7 +415,7 @@ pub mod Login {
 //            println!("Ready to deploy/login at: {:?}", target_address);
         }
 
-        /// Verifies that the user is trying to access to the allowed entry points.
+        /// Verifies that the user is trying to access the allowed entry points.
         //TODO: Ver si se puede remover eso ya que solo hay 2 entrypoints
         fn is_user_entrypoint(self:@ContractState, selector: felt252) -> bool {
             let mut is_contained: bool = false;
@@ -435,12 +437,12 @@ pub mod Login {
             return signature;
         }
 
-        /// Verifies that the given modulus_F is the same as the stored one.
+        /// Verifies that the given `modulus_f` is equal to the one in storage.
         fn validate_oauth_modulus_F(self: @ContractState, modulus_f: u256) {
             assert(self.oauth_modulus_F.read() == modulus_f, LoginErrors::INVALID_OAUTH_SIGNATURE);
         }
 
-        /// Computed the final account_address for the given address_seed
+        /// Pre-computes the final account_address for the given `address_seed`
         fn get_target_address(self: @ContractState, address_seed: u256) -> ContractAddress {
             let login_address = get_contract_address();
             let account_class = self.sumo_account_class_hash.read();
