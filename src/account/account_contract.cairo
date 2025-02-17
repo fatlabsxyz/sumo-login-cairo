@@ -63,10 +63,10 @@ pub mod Account {
 
     #[constructor]
     fn constructor(ref self: ContractState) {
-        //Might be the universal deployer address if deploy is made with a DEPLOY_ACCOUNT transaction
-        //If the deploy is made with an INVOKE transaction the caller addres is the sumo_Login address.
-        //Si se cambian la cantidad de argumentos del constructor recordar que el hash finaliza con hash(cantidad),
-        //ir a cambiarlo
+        // Might be the universal deployer address if deploy is made with a DEPLOY_ACCOUNT transaction
+        // If the deploy is made with an INVOKE transaction the caller addres is the sumo_Login address.
+        // Si se cambian la cantidad de argumentos del constructor recordar que el hash finaliza con hash(cantidad),
+        // ir a cambiarlo
         let deployer_address = get_caller_address();
         self.deployer_address.write(deployer_address);
     }
@@ -74,7 +74,7 @@ pub mod Account {
     #[abi(embed_v0)]
     impl AccountImpl of super::IAccount<ContractState> {
 
-        /// Verifies that the given signature is valid for the given hash and the secret key paired whit
+        /// Verifies that the given `signature` is valid for the given `msg_hash` and the secret key paired with
         /// the public key of this account.
         fn is_valid_signature(
             self: @ContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252 {
@@ -84,7 +84,7 @@ pub mod Account {
             } else { 0 }
         }
 
-        /// Verifies the validity of the signature for the current transaction.
+        /// Verifies the validity of the current transaction's signature.
         /// This function is used by the protocol to verify `invoke` transactions.
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             self.only_protocol();
@@ -93,11 +93,11 @@ pub mod Account {
             VALIDATED
         }
 
-        /// Executes a list of calls from the account.
+        /// Executes a list of `calls` from the account.
         ///
         /// - The transaction version must be greater than or equal to 1.
-        /// - The function ins only accesible by the protocol.
-        /// - The fuctions first tries to pay its debts and then proceeds to execute the calls.
+        /// - The function is only accessible by the protocol.
+        /// - The function attempts to pay the user's debts, if successful, it executes the calls.
         fn __execute__(ref self: ContractState, mut calls: Span<Call>) -> Array<Span<felt252>> {
             self.only_protocol();
             self.validate_tx_version();
@@ -108,8 +108,8 @@ pub mod Account {
         /// Changes the public key and the expiration of this account public key.
         ///
         /// It can be called by:
-        /// - This account if the owner has posetion of the private key.
-        /// - The sumo Login account after the user verifies the ZK proof.
+        /// - This account if the owner has possession of the private key.
+        /// - The Sumo Login account after the user verifies the ZK proof.
         ///
         /// Emits PkeyChanged event.
         fn change_pkey(ref self: ContractState, new_key: felt252, expiration_block: felt252) {
@@ -123,18 +123,18 @@ pub mod Account {
             }
         }
 
-        /// Pays the debt (if exists) to the sumo Login account.
+        /// Pays the user's debt (if applicable) to the Sumo Login account.
         ///
-        /// The pay is made by a "transfer" transaction to the Login account of the erc20 STRK_ADDRESS
-        /// If this account cannot pay its debt it cannot execute another transaction.
+        /// Payment is made by a "transfer" transaction to the Sumo Login account of the erc20 STRK_ADDRESS
+        /// If this account's debt cannot be paid, no further transactions will be executed.
         ///
         /// Emits DebtPayed event.
         fn pay(ref self: ContractState) {
             let caller = get_caller_address();
-            if caller != self.deployer_address.read() {  assert(false, AccountErrors::INVALID_DEPLOYER) }
+            if caller != self.deployer_address.read() { assert(false, AccountErrors::INVALID_DEPLOYER) }
             let debt: u128 = self.get_my_debt();
 
-            if !user_can_repay(get_contract_address(), debt) { assert(false, AccountErrors::NOT_ENOGHT_MONEY) } 
+            if !user_can_repay(get_contract_address(), debt) { assert(false, AccountErrors::NOT_ENOUGH_MONEY) } 
 
             let amount : u256 = debt.into();
 
@@ -155,7 +155,7 @@ pub mod Account {
 
     #[generate_trait]
     pub impl PrivateImpl of IPrivate {
-        ///Verifies that the caller address is zero. i.e. the caller is the protocol.
+        /// Verifies that the caller address is zero. i.e. the caller is the protocol.
         fn only_protocol(self: @ContractState) {
               let sender = get_caller_address();
               assert(sender.is_zero(), AccountErrors::INVALID_CALLER);
@@ -168,7 +168,7 @@ pub mod Account {
             assert(tx_version >= 1_u256, AccountErrors::INVALID_TX_VERSION);
         }
 
-        /// Verifies that the incoming transaction is signed by the private key of this account.
+        /// Verifies that the incoming transaction was signed by the private key of this account.
         fn validate_tx_signature(self: @ContractState){
             let tx_info = get_tx_info().unbox();
             let signature = tx_info.signature;
@@ -176,16 +176,16 @@ pub mod Account {
             assert(self.is_valid_signature(tx_hash, signature.into()) == VALIDATED, AccountErrors::INVALID_SIGNATURE);
         }
 
-        /// Verifies that the current block time is less that the block time of expiration set by the owner
+        /// Verifies that the current block time is less than the expiration block time set by the owner
         fn validate_block_time(self: @ContractState) {
             let max_block = self.expiration_block.read();
             if max_block != 0 {
                 let current = get_block_number();
-                assert(current < max_block, AccountErrors::EXPIRATED_SESSION)
+                assert(current < max_block, AccountErrors::EXPIRED_SESSION)
             }
         }
 
-        /// Calls for Login account to start the process of debt cancellation.
+        /// Calls for Sumo Login account to start the process of debt cancellation.
         fn call_for_collect(self: @ContractState) {
             syscalls::call_contract_syscall(
                self.deployer_address.read(),
@@ -194,7 +194,7 @@ pub mod Account {
             ).unwrap_syscall();
         }
 
-        /// Ask for the current debt of this account to the Login account.
+        /// Request this account's current debt to the Sumo Login account.
         fn get_my_debt(ref self: ContractState) -> u128 {
             let to = self.deployer_address.read();
             let res = syscalls::call_contract_syscall(

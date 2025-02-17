@@ -255,6 +255,7 @@ pub mod Login {
         /// Emits DebtCollected event
         fn collect_debt(ref self: ContractState, user_address:  ContractAddress) {
             let caller = get_caller_address();
+            // TODO: Chequear si tiene sentido que el error del assert sea selector 
             if ( caller != get_contract_address()) && (caller != user_address) {
                 assert(false, LoginErrors::SELECTOR_NOT_ALLOWED);
             } 
@@ -339,7 +340,7 @@ pub mod Login {
             let tx_info = get_tx_info().unbox();
             let tx_hash = tx_info.transaction_hash;
             let rs:Array<felt252> = array![r,s];
-            assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, LoginErrors::INVALID_ADMING_SIGNATURE);
+            assert(self.is_valid_signature(tx_hash,rs) == VALIDATED, LoginErrors::INVALID_ADMIN_SIGNATURE);
         }
 
         /// Updates the given `user_address` public key, and its expiration block.
