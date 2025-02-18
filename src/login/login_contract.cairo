@@ -101,8 +101,8 @@ pub mod Login {
     /// Initializes this contract.
     ///
     /// The deployer has to provide:
-    /// - The class hash of the sumo Account contract.
-    /// - The public key of this account.
+    /// - The class_hash of the sumo Account contract.
+    /// - The `public_key` of this account.
     fn constructor(ref self: ContractState, sumo_account_class_hash: felt252, public_key: felt252) {
         self.public_key.write(public_key);
         self.sumo_account_class_hash.write(sumo_account_class_hash);
@@ -165,7 +165,7 @@ pub mod Login {
             execute_calls(calls)
         }
         
-        /// Verifies if a given address is a sumo account deployed by this Login account.
+        /// Verifies if a given `user_address` is a sumo account deployed by this Login account.
         fn is_sumo_user(self: @ContractState, user_address: ContractAddress) -> bool {
             self.user_list.entry(user_address).read()
         }
@@ -179,10 +179,10 @@ pub mod Login {
         ///
         /// Emits LoginAccount event
         fn login(ref self:ContractState) {
-            //to reach this function the user has to have no debt. Otherwise it is rejected in the 
-            //validate. We cannot check in the validate if he has a way to pay for the login in the validate.
-            //If he has a way to pay, collect_debt will succeed. If not, he will have a new debt a he will not
-            //be able to use login if he does not pays his debt before.
+            // To reach this function the user has to have no debt. Otherwise it is rejected in the 
+            // validate. We cannot check in the validate if he has a way to pay for the login in the validate.
+            // If he has a way to pay, collect_debt will succeed. If not, he will accrue new debt, and will not
+            // be able to log in unless said debt is cancelled.
             let signature = self.get_serialized_signature();
             let (eph_key_0,eph_key_1) = signature.eph_key;
             let reconstructed_eph_key: felt252 = eph_key_0 * TWO_POWER_128 + eph_key_1;
@@ -198,10 +198,10 @@ pub mod Login {
             //self.collect_debt(user_address);
         }
 
-        /// Deploys a new sumo Account with the data given in the ZK proof.
+        /// Deploys a new Sumo Account using the data given in the ZK proof.
         ///
-        /// This function can olny be reach by an usser with a valid ZK proof without a previous sumo Account.
-        /// After deploy, sets the public key (and expiration time) to given in the transaction.
+        /// This function can only be reached by a user with a valid ZK proof and no previous Sumo Account.
+        /// After deployment, sets the public key (and expiration time) to one given in the transaction.
         /// Emits DeployAccount event
         fn deploy(ref self: ContractState) -> ContractAddress {
 //            println!("Entering deploy");
@@ -228,8 +228,8 @@ pub mod Login {
         }
 
 
-        /// Verifies that the given signature is valid for the given `msg_hash` and the secret key paired with
-        /// the public key of this account.
+        /// Verifies that the given `signature` is valid for the given `msg_hash` and secret/public key pair of
+        /// this account.
         fn is_valid_signature(
             self: @ContractState, msg_hash: felt252, signature: Array<felt252>) -> felt252 {
             let public_key = self.public_key.read();
@@ -240,16 +240,16 @@ pub mod Login {
             }
         }
 
-        /// Recovers the debt of a given `user_address`.
+        /// Returns the debt of a given `user_address`.
         fn get_user_debt(self: @ContractState, user_address:ContractAddress) -> u128 {
             self.user_debt.entry(user_address).read()
         }
 
-        /// Makes the given sumo account to pay its debt if posible.
+        /// Makes the given sumo account pay its debt if posible.
         ///
         /// This function can be called by:
         /// - The owner the given account, each time it tries to execute a transaction.
-        ///   This enforces that the account will pay its debt as soon as posible.
+        ///   This enforces that the account will pay its debt as soon as possible.
         /// - The owner of this sumo Login account. 
         ///
         /// Emits DebtCollected event
@@ -295,8 +295,8 @@ pub mod Login {
         /// Adds debt on a given `value` to a contract `address`. 
         ///
         /// This occurs in two occasions:
-        /// - When deploying a new account, a `DEPLOY_FEE` is added as debt to that account.
-        /// - When updating the publick key a pre-existing user.
+        /// - When deploying a new account, a `DEPLOY_FEE` is added as new debt to that account.
+        /// - When updating the public key of a pre-existing user.
         /// In either case, the user has to provide a valid ZK proof of their identity.
         fn add_debt(ref self: ContractState, address: ContractAddress, value: u128) {
             let gas_price = get_gas_price();
@@ -324,7 +324,7 @@ pub mod Login {
         /// that is part of the ZK proof.
         ///
         /// As part of the sumo ZK protocol the user generates a pair (pk,sk). The transaction Deploy/Login
-        /// is signed by the newly generated secret key and the public key is send in the transaction.
+        /// is signed by the newly generated secret key, and the public key is sent in the transaction.
         fn validate_tx_user_signature(self: @ContractState, eph_key:(felt252,felt252), r:felt252, s:felt252){
             let tx_info = get_tx_info().unbox();
             let tx_hash = tx_info.transaction_hash;
@@ -377,7 +377,7 @@ pub mod Login {
 
         /// Verifies that the call target is this account
         ///
-        /// Since we need to allow user with a valid ZK proof to use the entry points Deploy or Login while they
+        /// Since we need to allow a user with a valid ZK proof to use the entry points Deploy or Login while they
         /// are impersonating us, we have to block them from calling Deploy/Login functions in other contracts.
         fn only_self_call(self: @ContractState, call: Call) {
             let target_address: ContractAddress = call.to;
@@ -443,7 +443,7 @@ pub mod Login {
             assert(self.oauth_modulus_F.read() == modulus_f, LoginErrors::INVALID_OAUTH_SIGNATURE);
         }
 
-        /// Pre-computes the final account_address for the given `address_seed`
+        /// Pre-computes the final account_address for a given `address_seed`
         fn get_target_address(self: @ContractState, address_seed: u256) -> ContractAddress {
             let login_address = get_contract_address();
             let account_class = self.sumo_account_class_hash.read();

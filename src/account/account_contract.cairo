@@ -63,8 +63,8 @@ pub mod Account {
 
     #[constructor]
     fn constructor(ref self: ContractState) {
-        // Might be the universal deployer address if deploy is made with a DEPLOY_ACCOUNT transaction
-        // If the deploy is made with an INVOKE transaction the caller addres is the sumo_Login address.
+        // Might be the universal deployer address if a deployment is executed with a DEPLOY_ACCOUNT transaction
+        // If the deployment is made with an INVOKE transaction the caller address is the sumo_Login address.
         // Si se cambian la cantidad de argumentos del constructor recordar que el hash finaliza con hash(cantidad),
         // ir a cambiarlo
         let deployer_address = get_caller_address();
@@ -85,7 +85,7 @@ pub mod Account {
         }
 
         /// Verifies the validity of the current transaction's signature.
-        /// This function is used by the protocol to verify `invoke` transactions.
+        /// This function is used by the protocol to verify INVOKE transactions.
         fn __validate__(self: @ContractState, calls: Span<Call>) -> felt252 {
             self.only_protocol();
             self.validate_block_time();
@@ -105,7 +105,7 @@ pub mod Account {
             execute_calls(calls)
         }
 
-        /// Changes the public key and the expiration of this account public key.
+        /// Changes the public key and the expiration block of this account.
         ///
         /// It can be called by:
         /// - This account if the owner has possession of the private key.
