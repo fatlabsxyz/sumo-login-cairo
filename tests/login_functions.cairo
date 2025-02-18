@@ -1,4 +1,4 @@
-//These test shoul test Login fuctions not realed with the validate.
+//These tests should test Login functions not realed with the validate.
 
 use crate::setup::{ setup_login , transfer , balance_of };
 use crate::signatures::garaga_signature::{ signature };

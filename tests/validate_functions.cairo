@@ -1,5 +1,5 @@
-//These test pretend  to test all the functionalities of the __validate__ functions of the Login account.
-//the mock signature is un tests/signature.cairo.
+// These test are intended to test all the functionalities of the __validate__ functions for the Login account.
+// the mock signature is on tests/signature.cairo.
 
 use crate::setup::{ setup_login };
 use sumo::login::login_contract::{ ILoginDispatcher , ILoginDispatcherTrait };

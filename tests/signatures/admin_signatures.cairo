@@ -1,14 +1,14 @@
-//this signature was costructed with the private key
-//sk = 0x000000000000000000000000000000008d6bfaf9d111629e78aec17af5917076
-//whit publick key
-//pk = 0x06363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f
-//with expiration block 1_000_000
-//the transaction was a call to the address
+// This signature was constructed with the following private key: 
+// sk = 0x000000000000000000000000000000008d6bfaf9d111629e78aec17af5917076
+// and public key:
+// pk = 0x06363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f
+// with expiration block 1_000_000.
+// The transaction was a call to the address
 // 0x075662cc8b986d55d709d58f698bbb47090e2474918343b010192f487e30c23f
-//with selector "deploy", and zero array calldata
-//the nonce was 3
-//the transaction hash was
-//0x2418c6772ea47ddc9e3ea548bd2dfc9e9ce42365da5df0a2e872967e857bb97
+// with selector "deploy", and zero array calldata
+// the nonce was 3
+// the transaction hash was
+// 0x2418c6772ea47ddc9e3ea548bd2dfc9e9ce42365da5df0a2e872967e857bb97
 
 pub fn correct_admin_signature() -> Span<felt252> {
   let signature: Array<felt252> =   array![
