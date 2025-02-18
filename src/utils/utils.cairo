@@ -5,7 +5,7 @@ use crate::utils::constants::{ STRK_ADDRESS, MASK_250, ORACLE_ADDRESS };
 
 
 /// Verifies that the sha256 hash of the public inputs in the signature equals the
-/// one contained in all_inputs_hash
+/// one contained in `all_inputs_hash`
 pub fn validate_all_inputs_hash(signature : @Signature, all_inputs_hash: Span<u256>) -> bool {
     let (eph_0, eph_1) = *signature.eph_key;
 

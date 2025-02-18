@@ -11,7 +11,7 @@ pub mod LoginErrors {
     pub const MULTICALLS : felt252 = 'Login: multicalls not allowed';
     pub const NOT_USER : felt252 = 'Login: not a sumo user';
     pub const IS_USER : felt252 = 'Login: already an user';
-    pub const HAS_DEBT : felt252 = 'Login: user has a debt';
+    pub const HAS_DEBT : felt252 = 'Login: user has debt';
     pub const HAS_NOT_DEBT : felt252 = 'Login: user has no debt';
     pub const OUTSIDE_CALL : felt252 = 'Login: outside call not allowed';
     pub const SELECTOR_NOT_ALLOWED : felt252 = 'Login: selector not allowed';
