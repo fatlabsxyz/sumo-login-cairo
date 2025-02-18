@@ -1,10 +1,10 @@
 
-//this signature was costructed with the private key
-//sk = 0x000000000000000000000000000000008d6bfaf9d111629e78aec17af5917076
-//whit publick key
-//pk = 0x06363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f
-//the transaction hash was
-//0x2418c6772ea47ddc9e3ea548bd2dfc9e9ce42365da5df0a2e872967e857bb97
+// This signature was constructed with the following private key:
+// sk = 0x000000000000000000000000000000008d6bfaf9d111629e78aec17af5917076
+// and public key:
+// pk = 0x06363cb464857bb5eddfa351b098bc10c155d61de554640a1f78df62891cd03f
+// the transaction hash was
+// 0x2418c6772ea47ddc9e3ea548bd2dfc9e9ce42365da5df0a2e872967e857bb97
 
 pub fn correct_user_signature() -> Span<felt252> {
   let signature: Array<felt252> =   array![
