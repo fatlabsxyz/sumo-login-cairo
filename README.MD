@@ -1,6 +1,15 @@
 # SUMO - Cairo Contracts
 These are the cairo contracts that are used in [SUMO](sumologin.com)
 
+## About sumo:
+
+A zk-powered social login system using JWT proofs and account abstraction, built for seamless user onboarding.
+
+Sumo lets users sign into a smart contract wallet using any Web2 identity provider — Google, Discord, Apple, WeChat, and more — without seed phrases or browser extensions. Behind the scenes, it uses ephemeral session keys and zero-knowledge proofs to establish account ownership, ensuring full sovereignty with minimal friction.
+
+When a user logs in (e.g. with Google), they receive a JWT signed by the identity provider. This token, combined with client-generated session keys, is turned into a zkProof that verifies their identity without exposing it on-chain. That proof also doubles as 2FA and enables secure wallet interactions.
+
+Sumo accounts are smart wallets — consistent across sessions and accessible from any device. Whether swapping tokens or managing assets, everything runs on a fully abstracted, privacy-preserving stack leveraging Starknet, session keys, and ZK.
 
 ## Overall architecture
 The necessary contracts for the SUMO flow are two:
