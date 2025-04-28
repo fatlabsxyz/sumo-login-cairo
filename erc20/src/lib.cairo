@@ -38,7 +38,7 @@ pub mod ERC20Contract {
         fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool{
             let sender = starknet::get_caller_address();
             let from_balance = self.ERC20_balances.entry(sender).read();
-            assert(from_balance >= amount, 'ERC20: Insuficient Balance');
+            assert(from_balance >= amount, 'ERC20: Insufficient Balance');
             self.ERC20_balances.entry(sender).write(from_balance - amount);
             let to_balance = self.ERC20_balances.entry(recipient).read();
             self.ERC20_balances.entry(recipient).write(to_balance + amount);
